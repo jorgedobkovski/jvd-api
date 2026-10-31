@@ -80,4 +80,52 @@ public class ApiCadastrosSemBancoTests(JvdApiFactory fabrica) : IClassFixture<Jv
 
         Assert.Equal(HttpStatusCode.Forbidden, resposta.StatusCode);
     }
+
+    // ---------- emissor e catálogo (Fase 2B-2) ----------
+
+    public static IEnumerable<object[]> RotasDeEmissorECatalogo()
+    {
+        var id = Guid.NewGuid();
+        return new[]
+        {
+            new object[] { "GET", "/api/emissor" },
+            new object[] { "PUT", "/api/emissor" },
+            new object[] { "GET", "/api/catalogo-servicos" },
+            new object[] { "GET", $"/api/catalogo-servicos/{id}" },
+            new object[] { "POST", "/api/catalogo-servicos" },
+            new object[] { "PUT", $"/api/catalogo-servicos/{id}" },
+            new object[] { "POST", $"/api/catalogo-servicos/{id}/desativar" },
+            new object[] { "POST", $"/api/catalogo-servicos/{id}/reativar" }
+        };
+    }
+
+    public static IEnumerable<object[]> RotasDeEscritaDoGestor() =>
+        RotasDeEmissorECatalogo().Where(r => (string)r[0] != "GET");
+
+    [Theory]
+    [MemberData(nameof(RotasDeEmissorECatalogo))]
+    public async Task EmissorECatalogo_SemToken_Retorna401(string metodo, string rota)
+    {
+        var resposta = await ClienteCom(null).SendAsync(Pedido(metodo, rota));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(RotasDeEmissorECatalogo))]
+    public async Task EmissorECatalogo_ComSenhaProvisoria_Retorna403_MesmoSendoGestor(string metodo, string rota)
+    {
+        var resposta = await ClienteCom(PerfilUsuario.Gestor, senhaProvisoria: true).SendAsync(Pedido(metodo, rota));
+
+        Assert.Equal(HttpStatusCode.Forbidden, resposta.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(RotasDeEscritaDoGestor))]
+    public async Task EmissorECatalogo_Tecnico_NaoEscreve_Retorna403(string metodo, string rota)
+    {
+        var resposta = await ClienteCom(PerfilUsuario.Tecnico).SendAsync(Pedido(metodo, rota));
+
+        Assert.Equal(HttpStatusCode.Forbidden, resposta.StatusCode);
+    }
 }

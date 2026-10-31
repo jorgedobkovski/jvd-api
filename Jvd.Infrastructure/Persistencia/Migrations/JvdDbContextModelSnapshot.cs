@@ -130,6 +130,100 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.ToTable("cliente", (string)null);
                 });
 
+            modelBuilder.Entity("Jvd.Domain.Emissor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AtualizadoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("atualizado_em");
+
+                    b.Property<string>("Bairro")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)")
+                        .HasColumnName("bairro");
+
+                    b.Property<string>("Cep")
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)")
+                        .HasColumnName("cep");
+
+                    b.Property<string>("Cidade")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)")
+                        .HasColumnName("cidade");
+
+                    b.Property<string>("Cnpj")
+                        .IsRequired()
+                        .HasMaxLength(14)
+                        .HasColumnType("nvarchar(14)")
+                        .HasColumnName("cnpj");
+
+                    b.Property<string>("InscricaoEstadual")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("inscricao_estadual");
+
+                    b.Property<string>("Logradouro")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("logradouro");
+
+                    b.Property<string>("NomeFantasia")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("nome_fantasia");
+
+                    b.Property<string>("Numero")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("numero");
+
+                    b.Property<string>("NumeroAutorizacaoIpem")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("numero_autorizacao_ipem");
+
+                    b.Property<string>("RazaoSocial")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("razao_social");
+
+                    b.Property<string>("ResponsavelTecnicoCpf")
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)")
+                        .HasColumnName("responsavel_tecnico_cpf");
+
+                    b.Property<string>("ResponsavelTecnicoNome")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("responsavel_tecnico_nome");
+
+                    b.Property<string>("Telefones")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("telefones");
+
+                    b.Property<string>("Uf")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)")
+                        .HasColumnName("uf");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("versao");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("emissor", (string)null);
+                });
+
             modelBuilder.Entity("Jvd.Domain.Equipamento", b =>
                 {
                     b.Property<Guid>("Id")
@@ -233,6 +327,56 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.HasIndex("Entidade", "EntidadeId", "OcorridoEm");
 
                     b.ToTable("evento_cadastro", (string)null);
+                });
+
+            modelBuilder.Entity("Jvd.Domain.ServicoCatalogo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("bit")
+                        .HasColumnName("ativo");
+
+                    b.Property<DateTime>("AtualizadoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("atualizado_em");
+
+                    b.Property<string>("CodigoOrigem")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("codigo_origem");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("criado_em");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("descricao");
+
+                    b.Property<decimal?>("PrecoSugerido")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("preco_sugerido");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("versao");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ativo");
+
+                    b.HasIndex("Descricao");
+
+                    b.ToTable("catalogo_servico", (string)null);
                 });
 
             modelBuilder.Entity("Jvd.Infrastructure.Identity.RefreshToken", b =>

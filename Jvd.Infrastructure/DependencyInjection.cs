@@ -1,5 +1,7 @@
 using Jvd.Application.Autenticacao;
+using Jvd.Application.Catalogo;
 using Jvd.Application.Clientes;
+using Jvd.Application.Emissor;
 using Jvd.Application.Equipamentos;
 using Jvd.Application.Usuarios;
 using Jvd.Infrastructure.Autenticacao;
@@ -63,6 +65,8 @@ public static class DependencyInjection
         services.AddScoped<IUsuarioService, UsuarioService>();
         services.AddScoped<IClienteService, ClienteService>();
         services.AddScoped<IEquipamentoService, EquipamentoService>();
+        services.AddScoped<IEmissorService, EmissorService>();
+        services.AddScoped<ICatalogoServicoService, CatalogoServicoService>();
         services.AddScoped<UsuarioSeeder>();
 
         return services;
