@@ -100,6 +100,19 @@ public class AutorizacaoDasRotasReaisTests(JvdApiFactory fabrica) : IClassFixtur
     }
 
     [Fact]
+    public void RotasDeImportacao_ExigemSempreAPoliticaGestor()
+    {
+        var rotas = Rotas().Where(r => Caminho(r).StartsWith("/api/importacoes", StringComparison.Ordinal)).ToList();
+
+        Assert.NotEmpty(rotas);
+        Assert.All(rotas, r =>
+        {
+            Assert.False(Anonima(r));
+            Assert.Contains(r.Metadata.GetOrderedMetadata<IAuthorizeData>(), a => a.Policy == "Gestor");
+        });
+    }
+
+    [Fact]
     public void RotasDeUsuarios_ExigemSempreAPoliticaGestor()
     {
         var usuarios = Rotas().Where(r => Caminho(r).StartsWith("/api/usuarios", StringComparison.Ordinal)).ToList();

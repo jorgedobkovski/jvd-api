@@ -329,6 +329,105 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.ToTable("evento_cadastro", (string)null);
                 });
 
+            modelBuilder.Entity("Jvd.Domain.Importacao", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ExecutadaEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("executada_em");
+
+                    b.Property<string>("HashArquivo")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasColumnName("hash_arquivo");
+
+                    b.Property<string>("NomeArquivo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .HasColumnName("nome_arquivo");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<int>("TotalAvisos")
+                        .HasColumnType("int")
+                        .HasColumnName("total_avisos");
+
+                    b.Property<int>("TotalIgnoradas")
+                        .HasColumnType("int")
+                        .HasColumnName("total_ignoradas");
+
+                    b.Property<int>("TotalImportados")
+                        .HasColumnType("int")
+                        .HasColumnName("total_importados");
+
+                    b.Property<int>("TotalLidos")
+                        .HasColumnType("int")
+                        .HasColumnName("total_lidos");
+
+                    b.Property<int>("TotalRejeitados")
+                        .HasColumnType("int")
+                        .HasColumnName("total_rejeitados");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExecutadaEm");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("Tipo", "HashArquivo")
+                        .IsUnique();
+
+                    b.ToTable("importacao", (string)null);
+                });
+
+            modelBuilder.Entity("Jvd.Domain.ImportacaoErro", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Gravidade")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("gravidade");
+
+                    b.Property<Guid>("ImportacaoId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("importacao_id");
+
+                    b.Property<int>("Linha")
+                        .HasColumnType("int")
+                        .HasColumnName("linha");
+
+                    b.Property<string>("Motivo")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("motivo");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportacaoId", "Linha");
+
+                    b.ToTable("importacao_erro", (string)null);
+                });
+
             modelBuilder.Entity("Jvd.Domain.ServicoCatalogo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -629,6 +728,24 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.HasOne("Jvd.Domain.Cliente", null)
                         .WithMany()
                         .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jvd.Domain.Importacao", b =>
+                {
+                    b.HasOne("Jvd.Infrastructure.Identity.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jvd.Domain.ImportacaoErro", b =>
+                {
+                    b.HasOne("Jvd.Domain.Importacao", null)
+                        .WithMany()
+                        .HasForeignKey("ImportacaoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
