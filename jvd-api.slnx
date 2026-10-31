@@ -1,3 +1,7 @@
 <Solution>
   <Project Path="jvd-api/jvd-api.csproj" />
+  <Project Path="Jvd.Application/Jvd.Application.csproj" />
+  <Project Path="Jvd.Domain/Jvd.Domain.csproj" />
+  <Project Path="Jvd.Infrastructure/Jvd.Infrastructure.csproj" />
+  <Project Path="Jvd.Tests/Jvd.Tests.csproj" />
 </Solution>
