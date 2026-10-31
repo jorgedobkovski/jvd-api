@@ -1,7 +1,9 @@
 using Jvd.Application.Autenticacao;
+using Jvd.Application.Usuarios;
 using Jvd.Infrastructure.Autenticacao;
 using Jvd.Infrastructure.Identity;
 using Jvd.Infrastructure.Persistencia;
+using Jvd.Infrastructure.Usuarios;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -55,6 +57,7 @@ public static class DependencyInjection
 
         services.AddSingleton<EmissorDeTokens>();
         services.AddScoped<IAutenticacaoService, AutenticacaoService>();
+        services.AddScoped<IUsuarioService, UsuarioService>();
         services.AddScoped<UsuarioSeeder>();
 
         return services;

@@ -19,10 +19,13 @@ public class ApiSemBancoTests : IClassFixture<JvdApiFactory>
 
     public ApiSemBancoTests(JvdApiFactory fabrica) => _fabrica = fabrica;
 
-    private string TokenValido(PerfilUsuario perfil = PerfilUsuario.Tecnico)
+    private string TokenValido(PerfilUsuario perfil = PerfilUsuario.Tecnico, bool senhaProvisoria = false)
     {
         var emissor = _fabrica.Services.GetRequiredService<EmissorDeTokens>();
-        var (token, _) = emissor.GerarAccessToken(new Usuario { Id = Guid.NewGuid(), Nome = "Teste", Perfil = perfil });
+        var (token, _) = emissor.GerarAccessToken(new Usuario
+        {
+            Id = Guid.NewGuid(), Nome = "Teste", Perfil = perfil, DeveTrocarSenha = senhaProvisoria
+        });
         return token;
     }
 
@@ -71,6 +74,70 @@ public class ApiSemBancoTests : IClassFixture<JvdApiFactory>
         var corpo = await resposta.Content.ReadAsStringAsync();
         Assert.Contains("Gestor", corpo);
         Assert.Contains("Teste", corpo);
+    }
+
+    // ---------- autorização por perfil e senha provisória (Fase 2A) ----------
+
+    [Fact]
+    public async Task Usuarios_SemToken_Retorna401() =>
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _fabrica.CreateClient().GetAsync("/api/usuarios")).StatusCode);
+
+    [Fact]
+    public async Task Usuarios_ComTokenDeTecnico_Retorna403()
+    {
+        var cliente = ClienteCom(TokenValido(PerfilUsuario.Tecnico));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await cliente.GetAsync("/api/usuarios")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cliente.PostAsJsonAsync("/api/usuarios", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await cliente.PostAsync($"/api/usuarios/{Guid.NewGuid()}/desativar", null)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Usuarios_ComGestorComSenhaProvisoria_Retorna403()
+    {
+        var cliente = ClienteCom(TokenValido(PerfilUsuario.Gestor, senhaProvisoria: true));
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await cliente.GetAsync("/api/usuarios")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("99")]
+    [InlineData("1")]          // número não vale: só o nome do perfil
+    [InlineData("Administrador")]
+    [InlineData("")]
+    public async Task Usuarios_Criar_ComPerfilInvalido_Retorna400SemTocarOBanco(string perfil)
+    {
+        var cliente = ClienteCom(TokenValido(PerfilUsuario.Gestor));
+
+        var resposta = await cliente.PostAsJsonAsync("/api/usuarios", new
+        {
+            nome = "Fulano", email = "fulano@exemplo.invalid", perfil, senhaProvisoria = DadosDeTeste.SenhaValida
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+    }
+
+    [Fact]
+    public async Task Me_ComSenhaProvisoria_FuncionaEInformaATrocaPendente()
+    {
+        var resposta = await ClienteCom(TokenValido(PerfilUsuario.Tecnico, senhaProvisoria: true)).GetAsync("/api/auth/me");
+
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        Assert.Contains("\"deveTrocarSenha\":true", await resposta.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task TrocarSenha_SemToken_Retorna401() =>
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await _fabrica.CreateClient().PostAsJsonAsync("/api/auth/trocar-senha", new { senhaAtual = "x", novaSenha = "y" })).StatusCode);
+
+    [Fact]
+    public async Task TrocarSenha_ComCorpoInvalido_Retorna400()
+    {
+        var resposta = await ClienteCom(TokenValido(PerfilUsuario.Tecnico, senhaProvisoria: true))
+            .PostAsJsonAsync("/api/auth/trocar-senha", new { senhaAtual = "", novaSenha = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
     }
 
     [Fact]

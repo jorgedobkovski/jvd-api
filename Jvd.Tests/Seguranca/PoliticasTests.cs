@@ -11,24 +11,26 @@ public class PoliticasTests
     private static ServiceProvider Provedor() =>
         new ServiceCollection().AddLogging().AddAuthorization(Politicas.Configurar).BuildServiceProvider();
 
-    private static ClaimsPrincipal Usuario(string? perfil)
+    private static ClaimsPrincipal Usuario(string? perfil, bool trocaDeSenhaPendente = false)
     {
         if (perfil is null)
         {
             return new ClaimsPrincipal(new ClaimsIdentity()); // anônimo (sem tipo de autenticação)
         }
 
+        var claims = new List<Claim> { new(NomesDeClaims.Perfil, perfil) };
+        if (trocaDeSenhaPendente) claims.Add(new Claim(NomesDeClaims.TrocarSenha, "true"));
+
         var identidade = new ClaimsIdentity(
-            [new Claim(NomesDeClaims.Perfil, perfil)],
-            authenticationType: "teste", nameType: NomesDeClaims.Nome, roleType: NomesDeClaims.Perfil);
+            claims, authenticationType: "teste", nameType: NomesDeClaims.Nome, roleType: NomesDeClaims.Perfil);
         return new ClaimsPrincipal(identidade);
     }
 
-    private static async Task<bool> Autorizado(string politica, string? perfil)
+    private static async Task<bool> Autorizado(string politica, string? perfil, bool trocaDeSenhaPendente = false)
     {
         using var provedor = Provedor();
         var servico = provedor.GetRequiredService<IAuthorizationService>();
-        var resultado = await servico.AuthorizeAsync(Usuario(perfil), resource: null, politica);
+        var resultado = await servico.AuthorizeAsync(Usuario(perfil, trocaDeSenhaPendente), resource: null, politica);
         return resultado.Succeeded;
     }
 
@@ -47,6 +49,46 @@ public class PoliticasTests
     [InlineData(null, false)]
     public async Task PoliticaGestor_AceitaSomenteGestor(string? perfil, bool esperado) =>
         Assert.Equal(esperado, await Autorizado(Politicas.Gestor, perfil));
+
+    [Theory]
+    [InlineData("Tecnico", false)]  // com senha provisória, NENHUMA política de perfil libera o acesso
+    [InlineData("Gestor", false)]
+    public async Task SenhaProvisoria_BloqueiaAsPoliticasDePerfil(string perfil, bool esperado)
+    {
+        Assert.Equal(esperado, await Autorizado(Politicas.Tecnico, perfil, trocaDeSenhaPendente: true));
+        Assert.Equal(esperado, await Autorizado(Politicas.Gestor, perfil, trocaDeSenhaPendente: true));
+    }
+
+    [Theory]
+    [InlineData("Tecnico", true, true)]
+    [InlineData("Gestor", true, true)]
+    [InlineData("Tecnico", false, true)]
+    [InlineData(null, false, false)] // anônimo nunca
+    public async Task PoliticaAutenticado_LiberaMesmoComSenhaProvisoria(string? perfil, bool trocaPendente, bool esperado) =>
+        Assert.Equal(esperado, await Autorizado(Politicas.Autenticado, perfil, trocaPendente));
+
+    [Fact]
+    public async Task PoliticaDefault_DoAuthorizePuro_BloqueiaQuemTemSenhaProvisoria()
+    {
+        using var provedor = Provedor();
+        var padrao = await provedor.GetRequiredService<IAuthorizationPolicyProvider>().GetDefaultPolicyAsync();
+        var servico = provedor.GetRequiredService<IAuthorizationService>();
+
+        Assert.False((await servico.AuthorizeAsync(Usuario("Tecnico", trocaDeSenhaPendente: true), null, padrao)).Succeeded);
+        Assert.False((await servico.AuthorizeAsync(Usuario(null), null, padrao)).Succeeded);
+        Assert.True((await servico.AuthorizeAsync(Usuario("Tecnico"), null, padrao)).Succeeded);
+    }
+
+    [Fact]
+    public async Task PoliticaPadrao_BloqueiaQuemTemSenhaProvisoria()
+    {
+        using var provedor = Provedor();
+        var fallback = (await provedor.GetRequiredService<IAuthorizationPolicyProvider>().GetFallbackPolicyAsync())!;
+        var servico = provedor.GetRequiredService<IAuthorizationService>();
+
+        Assert.False((await servico.AuthorizeAsync(Usuario("Gestor", trocaDeSenhaPendente: true), null, fallback)).Succeeded);
+        Assert.True((await servico.AuthorizeAsync(Usuario("Gestor"), null, fallback)).Succeeded);
+    }
 
     [Fact]
     public async Task PoliticaPadrao_ExigeUsuarioAutenticado()

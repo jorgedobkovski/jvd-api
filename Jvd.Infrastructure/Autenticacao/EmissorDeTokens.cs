@@ -29,19 +29,32 @@ public sealed class EmissorDeTokens(IOptions<JwtOptions> opcoes, TimeProvider re
             IssuedAt = agora,
             NotBefore = agora,
             Expires = expira,
-            Subject = new ClaimsIdentity(
-            [
-                new Claim(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
-                new Claim(NomesDeClaims.Nome, usuario.Nome),
-                new Claim(NomesDeClaims.Perfil, usuario.Perfil.ToString())
-            ]),
+            Subject = new ClaimsIdentity(Claims(usuario)),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.SigningKey)),
                 SecurityAlgorithms.HmacSha256)
         };
 
         return (_handler.CreateToken(descritor), expira);
+    }
+
+    private static List<Claim> Claims(Usuario usuario)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
+            new(NomesDeClaims.Nome, usuario.Nome),
+            new(NomesDeClaims.Perfil, usuario.Perfil.ToString())
+        };
+
+        // Senha provisória: o token só serve para trocar a senha (política em jvd-api/Seguranca/Politicas.cs).
+        if (usuario.DeveTrocarSenha)
+        {
+            claims.Add(new Claim(NomesDeClaims.TrocarSenha, "true"));
+        }
+
+        return claims;
     }
 
     /// <summary>Token opaco de 256 bits, em base64url. O valor em claro nunca é gravado.</summary>
@@ -58,4 +71,5 @@ public static class NomesDeClaims
 {
     public const string Nome = "name";
     public const string Perfil = "role";
+    public const string TrocarSenha = "trocar_senha";
 }

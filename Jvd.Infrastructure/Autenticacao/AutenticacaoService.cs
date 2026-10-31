@@ -1,4 +1,6 @@
 using Jvd.Application.Autenticacao;
+using Jvd.Application.Comum;
+using Jvd.Domain;
 using Jvd.Infrastructure.Identity;
 using Jvd.Infrastructure.Persistencia;
 using Microsoft.AspNetCore.Identity;
@@ -65,7 +67,15 @@ public sealed class AutenticacaoService(
             return ResultadoAutenticacao.Erro(FalhaAutenticacao.TokenInvalido);
         }
 
-        if (atual.UsadoEm is not null || atual.RevogadoEm is not null)
+        // Revogado DE PROPÓSITO (logout, troca/redefinição de senha, desativação, mudança de perfil): só recusa.
+        // Um aparelho esquecido com sessão antiga não pode derrubar as sessões novas do usuário.
+        if (atual.RevogadoEm is not null)
+        {
+            return ResultadoAutenticacao.Erro(FalhaAutenticacao.TokenInvalido);
+        }
+
+        // Já usado (rotacionado) e apresentado de novo: pedido simultâneo ou possível roubo.
+        if (atual.UsadoEm is not null)
         {
             return await TratarReapresentacaoAsync(atual, agora, ct);
         }
@@ -95,6 +105,11 @@ public sealed class AutenticacaoService(
         {
             await transacao.RollbackAsync(ct);
             var relido = await db.RefreshTokens.AsNoTracking().SingleOrDefaultAsync(t => t.Id == atual.Id, ct);
+            if (relido?.RevogadoEm is not null)
+            {
+                return ResultadoAutenticacao.Erro(FalhaAutenticacao.TokenInvalido);
+            }
+
             return await TratarReapresentacaoAsync(relido ?? atual, agora, ct);
         }
 
@@ -126,6 +141,70 @@ public sealed class AutenticacaoService(
         await db.RefreshTokens
             .Where(t => t.UsuarioId == usuarioId && t.RevogadoEm == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevogadoEm, agora), ct);
+    }
+
+    /// <summary>
+    /// Troca a PRÓPRIA senha: confere a senha atual (errar conta como falha de login), aplica a política, limpa a
+    /// obrigação de troca, revoga todas as sessões e emite tokens novos — tudo numa só transação.
+    /// </summary>
+    public async Task<Resultado<TokensEmitidos>> TrocarSenhaAsync(
+        Guid usuarioId, string senhaAtual, string novaSenha, CancellationToken ct = default)
+    {
+        var usuario = await usuarios.FindByIdAsync(usuarioId.ToString());
+        if (usuario is null || !usuario.Ativo || await usuarios.IsLockedOutAsync(usuario))
+        {
+            return Resultado<TokensEmitidos>.Falha(new ErroNegocio(CodigosDeErro.SessaoInvalida, "Sessão inválida."));
+        }
+
+        // Quem tem só um access token roubado não pode adivinhar a senha atual à vontade:
+        // errar aqui conta como falha de login e leva ao bloqueio da conta.
+        if (!await usuarios.CheckPasswordAsync(usuario, senhaAtual))
+        {
+            await usuarios.AccessFailedAsync(usuario);
+            log.LogWarning("Senha atual incorreta na troca de senha do usuário {UsuarioId}", usuario.Id);
+            return Resultado<TokensEmitidos>.Falha(new ErroNegocio(CodigosDeErro.SenhaAtualIncorreta, "A senha atual está incorreta."));
+        }
+
+        if (string.Equals(senhaAtual, novaSenha, StringComparison.Ordinal))
+        {
+            return Resultado<TokensEmitidos>.Falha(new ErroNegocio(CodigosDeErro.NovaSenhaIgualAtual, "A nova senha precisa ser diferente da atual."));
+        }
+
+        await using var transacao = await db.Database.BeginTransactionAsync(ct);
+
+        var troca = await usuarios.ChangePasswordAsync(usuario, senhaAtual, novaSenha);
+        if (!troca.Succeeded)
+        {
+            return Resultado<TokensEmitidos>.Falha(TradutorDeErrosIdentity.Senha(troca.Errors));
+        }
+
+        var agora = relogio.GetUtcNow().UtcDateTime;
+        usuario.DeveTrocarSenha = false;
+        usuario.AtualizadoEm = agora;
+        var atualizado = await usuarios.UpdateAsync(usuario);
+        if (!atualizado.Succeeded)
+        {
+            return Resultado<TokensEmitidos>.Falha(TradutorDeErrosIdentity.Usuario(atualizado.Errors));
+        }
+
+        await usuarios.ResetAccessFailedCountAsync(usuario);
+        await RevogarTodasAsync(usuario.Id, ct);
+
+        db.EventosDeCadastro.Add(new EventoDeCadastro
+        {
+            Id = Guid.NewGuid(),
+            Entidade = "usuario",
+            EntidadeId = usuario.Id,
+            Tipo = TipoEventoCadastro.SenhaTrocada,
+            AtorId = usuario.Id,
+            OcorridoEm = agora,
+            Campos = "senha"
+        });
+
+        var (tokens, _) = await EmitirAsync(usuario, ct); // SaveChanges grava também o evento
+        await transacao.CommitAsync(ct);
+
+        return Resultado<TokensEmitidos>.Ok(tokens);
     }
 
     /// <summary>
@@ -174,7 +253,7 @@ public sealed class AutenticacaoService(
         var tokens = new TokensEmitidos(
             accessToken, accessExpira,
             refreshEmClaro, refreshExpira,
-            new UsuarioAutenticado(usuario.Id, usuario.Nome, usuario.Perfil));
+            new UsuarioAutenticado(usuario.Id, usuario.Nome, usuario.Perfil, usuario.DeveTrocarSenha));
 
         return (tokens, refreshId);
     }

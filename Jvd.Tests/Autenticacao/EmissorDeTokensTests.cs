@@ -75,6 +75,22 @@ public class EmissorDeTokensTests
         Assert.False(jwt.TryGetClaim("email", out _));
     }
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void AccessToken_SoTemAClaimDeTrocaDeSenha_QuandoASenhaEProvisoria(bool provisoria, bool esperado)
+    {
+        var (emissor, _) = Criar();
+        var usuario = NovoUsuario();
+        usuario.DeveTrocarSenha = provisoria;
+
+        var (token, _) = emissor.GerarAccessToken(usuario);
+        var jwt = new JsonWebToken(token);
+
+        Assert.Equal(esperado, jwt.TryGetClaim(NomesDeClaims.TrocarSenha, out var claim));
+        if (esperado) Assert.Equal("true", claim.Value);
+    }
+
     [Fact]
     public void AccessToken_ExpiraConformeAConfiguracao()
     {

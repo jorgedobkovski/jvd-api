@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Jvd.Domain;
 using Jvd.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -14,6 +15,7 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
     : IdentityUserContext<Usuario, Guid>(options)
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<EventoDeCadastro> EventosDeCadastro => Set<EventoDeCadastro>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -25,6 +27,7 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             e.Property(u => u.Nome).HasMaxLength(150).IsRequired();
             e.Property(u => u.Perfil).HasConversion<string>().HasMaxLength(20).IsRequired();
             e.Property(u => u.Cpf).HasMaxLength(11);
+            e.Property(u => u.DeveTrocarSenha).HasDefaultValue(false);
             e.Property(u => u.CriadoEm).HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
             e.Property(u => u.AtualizadoEm).HasColumnType("datetime2").HasDefaultValueSql("SYSUTCDATETIME()");
 
@@ -50,6 +53,17 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             e.HasIndex(t => t.UsuarioId);
             // Usuários nunca são apagados fisicamente (exclusão lógica), então não há cascata.
             e.HasOne<Usuario>().WithMany().HasForeignKey(t => t.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<EventoDeCadastro>(e =>
+        {
+            e.ToTable("evento_cadastro");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Entidade).HasMaxLength(40).IsRequired();
+            e.Property(x => x.Tipo).HasConversion<string>().HasMaxLength(30).IsRequired();
+            e.Property(x => x.OcorridoEm).HasColumnType("datetime2");
+            e.Property(x => x.Campos).HasMaxLength(500);
+            e.HasIndex(x => new { x.Entidade, x.EntidadeId, x.OcorridoEm });
         });
 
         AplicarSnakeCase(builder);

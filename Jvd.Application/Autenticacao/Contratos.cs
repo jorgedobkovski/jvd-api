@@ -1,10 +1,11 @@
+using Jvd.Application.Comum;
 using Jvd.Domain;
 
 namespace Jvd.Application.Autenticacao;
 
 public sealed record LoginComando(string Email, string Senha);
 
-public sealed record UsuarioAutenticado(Guid Id, string Nome, PerfilUsuario Perfil);
+public sealed record UsuarioAutenticado(Guid Id, string Nome, PerfilUsuario Perfil, bool DeveTrocarSenha);
 
 public sealed record TokensEmitidos(
     string AccessToken,
@@ -45,4 +46,10 @@ public interface IAutenticacaoService
 
     /// <summary>Revoga todas as sessões do usuário (troca de senha, desativação, suspeita de roubo).</summary>
     Task RevogarTodasAsync(Guid usuarioId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Troca a PRÓPRIA senha. Exige a senha atual (errar conta como tentativa de login e pode bloquear a conta),
+    /// aplica a política, revoga todas as sessões e devolve tokens novos já sem a obrigação de troca.
+    /// </summary>
+    Task<Resultado<TokensEmitidos>> TrocarSenhaAsync(Guid usuarioId, string senhaAtual, string novaSenha, CancellationToken ct = default);
 }

@@ -18,7 +18,7 @@ public sealed class RefreshRequest
     public string RefreshToken { get; init; } = "";
 }
 
-public sealed record UsuarioResponse(Guid Id, string Nome, string Perfil);
+public sealed record UsuarioResponse(Guid Id, string Nome, string Perfil, bool DeveTrocarSenha);
 
 public sealed record TokenResponse(
     string AccessToken,
@@ -32,5 +32,5 @@ public sealed record TokenResponse(
         DateTime.SpecifyKind(t.AccessTokenExpiraEm, DateTimeKind.Utc),
         t.RefreshToken,
         DateTime.SpecifyKind(t.RefreshTokenExpiraEm, DateTimeKind.Utc),
-        new UsuarioResponse(t.Usuario.Id, t.Usuario.Nome, t.Usuario.Perfil.ToString()));
+        new UsuarioResponse(t.Usuario.Id, t.Usuario.Nome, t.Usuario.Perfil.ToString(), t.Usuario.DeveTrocarSenha));
 }
