@@ -39,6 +39,27 @@ public static class DadosDeTeste
     public const string SenhaValida = "SenhaDeTeste#2026";
     public const string OrigemPermitida = "http://localhost:4200";
 
+    /// <summary>CPF sintético VÁLIDO e único (dígitos verificadores calculados), para testes que dependem de documento exclusivo.</summary>
+    public static string NovoCpf()
+    {
+        var d = new int[11];
+        var acaso = Random.Shared;
+        do
+        {
+            for (var i = 0; i < 9; i++) d[i] = acaso.Next(10);
+        } while (d.Take(9).Distinct().Count() == 1);
+
+        for (var alvo = 9; alvo < 11; alvo++)
+        {
+            var soma = 0;
+            for (var i = 0; i < alvo; i++) soma += d[i] * (alvo + 1 - i);
+            var resto = soma * 10 % 11;
+            d[alvo] = resto == 10 ? 0 : resto;
+        }
+
+        return string.Concat(d);
+    }
+
     public static string NovoEmail() => $"teste-{Guid.NewGuid():N}@exemplo.invalid";
 
     public static Dictionary<string, string?> ConfiguracaoBase(string conexao) => new()

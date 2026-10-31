@@ -1,6 +1,9 @@
 using Jvd.Application.Autenticacao;
+using Jvd.Application.Clientes;
+using Jvd.Application.Equipamentos;
 using Jvd.Application.Usuarios;
 using Jvd.Infrastructure.Autenticacao;
+using Jvd.Infrastructure.Cadastros;
 using Jvd.Infrastructure.Identity;
 using Jvd.Infrastructure.Persistencia;
 using Jvd.Infrastructure.Usuarios;
@@ -58,6 +61,8 @@ public static class DependencyInjection
         services.AddSingleton<EmissorDeTokens>();
         services.AddScoped<IAutenticacaoService, AutenticacaoService>();
         services.AddScoped<IUsuarioService, UsuarioService>();
+        services.AddScoped<IClienteService, ClienteService>();
+        services.AddScoped<IEquipamentoService, EquipamentoService>();
         services.AddScoped<UsuarioSeeder>();
 
         return services;
