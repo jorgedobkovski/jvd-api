@@ -1,5 +1,6 @@
 using Jvd.Tests.Api;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -75,6 +76,26 @@ public class AutorizacaoDasRotasReaisTests(JvdApiFactory fabrica) : IClassFixtur
             var restritaAoGestor = Caminho(r).EndsWith("/desativar", StringComparison.Ordinal)
                                    || Caminho(r).EndsWith("/reativar", StringComparison.Ordinal);
             Assert.Equal(restritaAoGestor, politicas.Contains("Gestor"));
+        });
+    }
+
+    [Theory]
+    [InlineData("/api/emissor")]
+    [InlineData("/api/catalogo-servicos")]
+    public void RotasDeEmissorECatalogo_LeituraExigeTecnico_EscritaExigeTambemGestor(string prefixo)
+    {
+        var rotas = Rotas().Where(r => Caminho(r).StartsWith(prefixo, StringComparison.Ordinal)).ToList();
+
+        Assert.NotEmpty(rotas);
+        Assert.All(rotas, r =>
+        {
+            Assert.False(Anonima(r));
+            var politicas = r.Metadata.GetOrderedMetadata<IAuthorizeData>().Select(a => a.Policy).ToList();
+            Assert.Contains("Tecnico", politicas);
+
+            var metodos = r.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods;
+            var escrita = metodos.Any(m => m != "GET");
+            Assert.Equal(escrita, politicas.Contains("Gestor"));
         });
     }
 

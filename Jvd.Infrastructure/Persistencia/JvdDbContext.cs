@@ -18,6 +18,8 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
     public DbSet<EventoDeCadastro> EventosDeCadastro => Set<EventoDeCadastro>();
     public DbSet<Cliente> Clientes => Set<Cliente>();
     public DbSet<Equipamento> Equipamentos => Set<Equipamento>();
+    public DbSet<Emissor> Emissores => Set<Emissor>();
+    public DbSet<ServicoCatalogo> Catalogo => Set<ServicoCatalogo>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -110,6 +112,44 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             e.HasIndex(x => x.NumeroInmetro);
             // Cliente nunca é apagado fisicamente (desativação lógica): sem cascata.
             e.HasOne<Cliente>().WithMany().HasForeignKey(x => x.ClienteId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Emissor>(e =>
+        {
+            e.ToTable("emissor");
+            e.HasKey(x => x.Id);
+            // Id fixo, sem geração de valor: a chave primária garante que só exista um emissor.
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.RazaoSocial).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NomeFantasia).HasMaxLength(200);
+            e.Property(x => x.Cnpj).HasMaxLength(14).IsRequired();
+            e.Property(x => x.InscricaoEstadual).HasMaxLength(30);
+            e.Property(x => x.Logradouro).HasMaxLength(150);
+            e.Property(x => x.Numero).HasMaxLength(20);
+            e.Property(x => x.Bairro).HasMaxLength(80);
+            e.Property(x => x.Cep).HasMaxLength(8);
+            e.Property(x => x.Cidade).HasMaxLength(80);
+            e.Property(x => x.Uf).HasMaxLength(2);
+            e.Property(x => x.Telefones).HasMaxLength(200);
+            e.Property(x => x.NumeroAutorizacaoIpem).HasMaxLength(60);
+            e.Property(x => x.ResponsavelTecnicoNome).HasMaxLength(150);
+            e.Property(x => x.ResponsavelTecnicoCpf).HasMaxLength(11);
+            e.Property(x => x.AtualizadoEm).HasColumnType("datetime2");
+            e.Property(x => x.Versao).IsRowVersion();
+        });
+
+        builder.Entity<ServicoCatalogo>(e =>
+        {
+            e.ToTable("catalogo_servico");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CodigoOrigem).HasMaxLength(40);
+            e.Property(x => x.Descricao).HasMaxLength(200).IsRequired();
+            e.Property(x => x.PrecoSugerido).HasColumnType("decimal(12,2)");
+            e.Property(x => x.CriadoEm).HasColumnType("datetime2");
+            e.Property(x => x.AtualizadoEm).HasColumnType("datetime2");
+            e.Property(x => x.Versao).IsRowVersion();
+            e.HasIndex(x => x.Descricao);
+            e.HasIndex(x => x.Ativo);
         });
 
         AplicarSnakeCase(builder);
