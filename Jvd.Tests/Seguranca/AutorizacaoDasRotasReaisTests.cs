@@ -58,6 +58,26 @@ public class AutorizacaoDasRotasReaisTests(JvdApiFactory fabrica) : IClassFixtur
         Assert.Equal(AnonimasEsperadas, anonimas);
     }
 
+    [Theory]
+    [InlineData("/api/clientes")]
+    [InlineData("/api/equipamentos")]
+    public void RotasDeCadastro_ExigemTecnico_EDesativarReativarExigemTambemGestor(string prefixo)
+    {
+        var rotas = Rotas().Where(r => Caminho(r).StartsWith(prefixo, StringComparison.Ordinal)).ToList();
+
+        Assert.NotEmpty(rotas);
+        Assert.All(rotas, r =>
+        {
+            Assert.False(Anonima(r));
+            var politicas = r.Metadata.GetOrderedMetadata<IAuthorizeData>().Select(a => a.Policy).ToList();
+            Assert.Contains("Tecnico", politicas);
+
+            var restritaAoGestor = Caminho(r).EndsWith("/desativar", StringComparison.Ordinal)
+                                   || Caminho(r).EndsWith("/reativar", StringComparison.Ordinal);
+            Assert.Equal(restritaAoGestor, politicas.Contains("Gestor"));
+        });
+    }
+
     [Fact]
     public void RotasDeUsuarios_ExigemSempreAPoliticaGestor()
     {

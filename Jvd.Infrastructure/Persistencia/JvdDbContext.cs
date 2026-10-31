@@ -16,6 +16,8 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<EventoDeCadastro> EventosDeCadastro => Set<EventoDeCadastro>();
+    public DbSet<Cliente> Clientes => Set<Cliente>();
+    public DbSet<Equipamento> Equipamentos => Set<Equipamento>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -64,6 +66,50 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             e.Property(x => x.OcorridoEm).HasColumnType("datetime2");
             e.Property(x => x.Campos).HasMaxLength(500);
             e.HasIndex(x => new { x.Entidade, x.EntidadeId, x.OcorridoEm });
+        });
+
+        builder.Entity<Cliente>(e =>
+        {
+            e.ToTable("cliente");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.NomeRazaoSocial).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NomeFantasia).HasMaxLength(200);
+            e.Property(x => x.Documento).HasMaxLength(14);
+            e.Property(x => x.InscricaoEstadualRg).HasMaxLength(30);
+            e.Property(x => x.Logradouro).HasMaxLength(150);
+            e.Property(x => x.Numero).HasMaxLength(20);
+            e.Property(x => x.Bairro).HasMaxLength(80);
+            e.Property(x => x.Cep).HasMaxLength(8);
+            e.Property(x => x.Cidade).HasMaxLength(80);
+            e.Property(x => x.Uf).HasMaxLength(2);
+            e.Property(x => x.Telefone).HasMaxLength(30);
+            e.Property(x => x.Email).HasMaxLength(254);
+            e.Property(x => x.Origem).HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.CriadoEm).HasColumnType("datetime2");
+            e.Property(x => x.AtualizadoEm).HasColumnType("datetime2");
+            e.Property(x => x.Versao).IsRowVersion();
+            // Documento NÃO é único (filiais compartilham CNPJ): o índice só acelera a busca e o aviso de duplicidade.
+            e.HasIndex(x => x.Documento);
+            e.HasIndex(x => x.NomeRazaoSocial);
+            e.HasIndex(x => x.Ativo);
+        });
+
+        builder.Entity<Equipamento>(e =>
+        {
+            e.ToTable("equipamento");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Descricao).HasMaxLength(200).IsRequired();
+            e.Property(x => x.NumeroSerie).HasMaxLength(60);
+            e.Property(x => x.NumeroInmetro).HasMaxLength(40);
+            e.Property(x => x.Observacoes).HasMaxLength(1000);
+            e.Property(x => x.CriadoEm).HasColumnType("datetime2");
+            e.Property(x => x.AtualizadoEm).HasColumnType("datetime2");
+            e.Property(x => x.Versao).IsRowVersion();
+            e.HasIndex(x => x.ClienteId);
+            e.HasIndex(x => x.NumeroSerie);
+            e.HasIndex(x => x.NumeroInmetro);
+            // Cliente nunca é apagado fisicamente (desativação lógica): sem cascata.
+            e.HasOne<Cliente>().WithMany().HasForeignKey(x => x.ClienteId).OnDelete(DeleteBehavior.Restrict);
         });
 
         AplicarSnakeCase(builder);
