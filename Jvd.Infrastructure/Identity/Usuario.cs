@@ -13,6 +13,9 @@ public sealed class Usuario : IdentityUser<Guid>
     public PerfilUsuario Perfil { get; set; }
     public string? Cpf { get; set; }
     public bool Ativo { get; set; } = true;
+
+    /// <summary>Senha provisória em uso: só a troca de senha é permitida até que seja feita (ADR-006).</summary>
+    public bool DeveTrocarSenha { get; set; }
     public DateTime CriadoEm { get; set; }
     public DateTime AtualizadoEm { get; set; }
 }

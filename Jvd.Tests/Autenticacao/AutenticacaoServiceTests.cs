@@ -427,6 +427,26 @@ public class AutenticacaoServiceTests : IClassFixture<BancoDeTeste>, IAsyncLifet
     }
 
     [FactBanco]
+    public async Task TokenRevogadoDePropositoReapresentado_NaoDerrubaAsSessoesNovas()
+    {
+        var (id, email) = await CriarUsuarioAsync();
+        var aparelhoEsquecido = (await LoginAsync(email)).Tokens!;
+        await ComServicoAsync(async s => { await s.EncerrarSessaoAsync(aparelhoEsquecido.RefreshToken); return 0; }); // logout
+        var sessaoNova = (await LoginAsync(email)).Tokens!;
+
+        // o aparelho antigo insiste em renovar com o token já revogado, várias vezes
+        for (var i = 0; i < 3; i++)
+        {
+            var tentativa = await RenovarAsync(aparelhoEsquecido.RefreshToken);
+            Assert.Equal(FalhaAutenticacao.TokenInvalido, tentativa.Falha);
+        }
+
+        var tokens = await TokensDoUsuarioAsync(id);
+        Assert.Null(tokens.Single(t => t.TokenHash == EmissorDeTokens.CalcularHash(sessaoNova.RefreshToken)).RevogadoEm);
+        Assert.True((await RenovarAsync(sessaoNova.RefreshToken)).Sucesso); // a sessão nova segue viva
+    }
+
+    [FactBanco]
     public async Task RevogarTodas_DerrubaTodasAsSessoesDoUsuario()
     {
         var (id, email) = await CriarUsuarioAsync();

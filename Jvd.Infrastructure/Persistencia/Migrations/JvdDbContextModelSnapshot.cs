@@ -22,6 +22,49 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("Jvd.Domain.EventoDeCadastro", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AtorId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("ator_id");
+
+                    b.Property<string>("Campos")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("campos");
+
+                    b.Property<string>("Entidade")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("entidade");
+
+                    b.Property<Guid>("EntidadeId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("entidade_id");
+
+                    b.Property<DateTime>("OcorridoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ocorrido_em");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasColumnName("tipo");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Entidade", "EntidadeId", "OcorridoEm");
+
+                    b.ToTable("evento_cadastro", (string)null);
+                });
+
             modelBuilder.Entity("Jvd.Infrastructure.Identity.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -105,6 +148,12 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("criado_em")
                         .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<bool>("DeveTrocarSenha")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false)
+                        .HasColumnName("deve_trocar_senha");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
