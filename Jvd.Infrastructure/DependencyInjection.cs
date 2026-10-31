@@ -2,11 +2,13 @@ using Jvd.Application.Autenticacao;
 using Jvd.Application.Catalogo;
 using Jvd.Application.Clientes;
 using Jvd.Application.Emissor;
+using Jvd.Application.Importacao;
 using Jvd.Application.Equipamentos;
 using Jvd.Application.Usuarios;
 using Jvd.Infrastructure.Autenticacao;
 using Jvd.Infrastructure.Cadastros;
 using Jvd.Infrastructure.Identity;
+using Jvd.Infrastructure.Importacao;
 using Jvd.Infrastructure.Persistencia;
 using Jvd.Infrastructure.Usuarios;
 using Microsoft.EntityFrameworkCore;
@@ -67,6 +69,8 @@ public static class DependencyInjection
         services.AddScoped<IEquipamentoService, EquipamentoService>();
         services.AddScoped<IEmissorService, EmissorService>();
         services.AddScoped<ICatalogoServicoService, CatalogoServicoService>();
+        services.AddSingleton<ILeitorDePlanilha, LeitorXlsx>();
+        services.AddScoped<IImportacaoService, ImportacaoService>();
         services.AddScoped<UsuarioSeeder>();
 
         return services;

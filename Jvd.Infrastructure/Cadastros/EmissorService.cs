@@ -2,7 +2,6 @@ using Jvd.Application.Comum;
 using Jvd.Application.Emissor;
 using Jvd.Domain;
 using Jvd.Infrastructure.Persistencia;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -49,10 +48,14 @@ public sealed class EmissorService(JvdDbContext db, TimeProvider relogio, ILogge
             {
                 await db.SaveChangesAsync(ct);
             }
-            catch (DbUpdateException ex) when (ChaveDuplicada(ex))
+            catch (DbUpdateException ex) when (Concorrencia.EhChaveDuplicada(ex))
             {
                 // Duas primeiras gravações ao mesmo tempo: a outra venceu.
                 return Resultado<EmissorResumo>.Falha(new ErroNegocio(CodigosDeErro.Conflito, Versao.MensagemDeConflito("cadastro")));
+            }
+            catch (Exception ex) when (Concorrencia.EhDeadlock(ex))
+            {
+                return Resultado<EmissorResumo>.Falha(Concorrencia.Conflito());
             }
 
             log.LogInformation("Emissor configurado por {AtorId}.", atorId);
@@ -81,6 +84,10 @@ public sealed class EmissorService(JvdDbContext db, TimeProvider relogio, ILogge
         catch (DbUpdateConcurrencyException)
         {
             return Resultado<EmissorResumo>.Falha(new ErroNegocio(CodigosDeErro.Conflito, Versao.MensagemDeConflito("cadastro")));
+        }
+        catch (Exception ex) when (Concorrencia.EhDeadlock(ex))
+        {
+            return Resultado<EmissorResumo>.Falha(Concorrencia.Conflito());
         }
 
         log.LogInformation("Emissor alterado por {AtorId}.", atorId);
@@ -200,16 +207,6 @@ public sealed class EmissorService(JvdDbContext db, TimeProvider relogio, ILogge
     }
 
     // ---------- apoio ----------
-
-    private static bool ChaveDuplicada(Exception ex)
-    {
-        for (var atual = ex; atual is not null; atual = atual.InnerException)
-        {
-            if (atual is SqlException { Number: 2627 or 2601 }) return true;
-        }
-
-        return false;
-    }
 
     private void RegistrarEvento(TipoEventoCadastro tipo, Guid atorId, DateTime quando, string? campos) =>
         db.EventosDeCadastro.Add(new EventoDeCadastro

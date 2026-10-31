@@ -103,6 +103,10 @@ public sealed class CatalogoServicoService(JvdDbContext db, TimeProvider relogio
         {
             return Resultado<ServicoSalvo>.Falha(new ErroNegocio(CodigosDeErro.Conflito, Versao.MensagemDeConflito("cadastro")));
         }
+        catch (Exception ex) when (Concorrencia.EhDeadlock(ex))
+        {
+            return Resultado<ServicoSalvo>.Falha(Concorrencia.Conflito());
+        }
 
         var avisos = alterados.Contains("descricao") ? await AvisosAsync(servico, ct) : [];
         return Resultado<ServicoSalvo>.Ok(new ServicoSalvo(Resumo(servico), avisos));
@@ -132,6 +136,10 @@ public sealed class CatalogoServicoService(JvdDbContext db, TimeProvider relogio
         catch (DbUpdateConcurrencyException)
         {
             return Resultado.Falha(new ErroNegocio(CodigosDeErro.Conflito, Versao.MensagemDeConflito("cadastro")));
+        }
+        catch (Exception ex) when (Concorrencia.EhDeadlock(ex))
+        {
+            return Resultado.Falha(Concorrencia.Conflito());
         }
 
         log.LogInformation("Serviço do catálogo {ServicoId} {Acao} por {AtorId}.", id, ativo ? "reativado" : "desativado", atorId);

@@ -37,6 +37,9 @@ public static class CodigosDeErro
     /// <summary>Outra alteração simultânea impediu a operação; vale tentar de novo.</summary>
     public const string Conflito = "conflito";
 
+    /// <summary>O mesmo arquivo de importação já foi processado (Specs/IMPORTACAO.md).</summary>
+    public const string ArquivoJaImportado = "importacao.arquivo_ja_importado";
+
     public const string EmailEmUso = "usuario.email_em_uso";
     public const string SenhaInvalida = "usuario.senha_invalida";
     public const string SenhaAtualIncorreta = "usuario.senha_atual_incorreta";

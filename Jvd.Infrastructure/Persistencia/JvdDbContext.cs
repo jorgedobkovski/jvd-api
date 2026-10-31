@@ -4,6 +4,7 @@ using Jvd.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using ImportacaoRealizada = Jvd.Domain.Importacao; // "Importacao" também é nome de namespace da Infrastructure
 
 namespace Jvd.Infrastructure.Persistencia;
 
@@ -20,6 +21,8 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
     public DbSet<Equipamento> Equipamentos => Set<Equipamento>();
     public DbSet<Emissor> Emissores => Set<Emissor>();
     public DbSet<ServicoCatalogo> Catalogo => Set<ServicoCatalogo>();
+    public DbSet<ImportacaoRealizada> Importacoes => Set<ImportacaoRealizada>();
+    public DbSet<ImportacaoErro> ImportacoesErros => Set<ImportacaoErro>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -150,6 +153,30 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             e.Property(x => x.Versao).IsRowVersion();
             e.HasIndex(x => x.Descricao);
             e.HasIndex(x => x.Ativo);
+        });
+
+        builder.Entity<ImportacaoRealizada>(e =>
+        {
+            e.ToTable("importacao");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Tipo).HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.NomeArquivo).HasMaxLength(200).IsRequired();
+            e.Property(x => x.HashArquivo).HasMaxLength(64).IsRequired();
+            e.Property(x => x.ExecutadaEm).HasColumnType("datetime2");
+            // Mesmo arquivo, mesmo tipo: uma única vez (trava contra reimportação, inclusive entre pedidos simultâneos).
+            e.HasIndex(x => new { x.Tipo, x.HashArquivo }).IsUnique();
+            e.HasIndex(x => x.ExecutadaEm);
+            e.HasOne<Usuario>().WithMany().HasForeignKey(x => x.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ImportacaoErro>(e =>
+        {
+            e.ToTable("importacao_erro");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Gravidade).HasConversion<string>().HasMaxLength(10).IsRequired();
+            e.Property(x => x.Motivo).HasMaxLength(300).IsRequired();
+            e.HasIndex(x => new { x.ImportacaoId, x.Linha });
+            e.HasOne<ImportacaoRealizada>().WithMany().HasForeignKey(x => x.ImportacaoId).OnDelete(DeleteBehavior.Restrict);
         });
 
         AplicarSnakeCase(builder);
