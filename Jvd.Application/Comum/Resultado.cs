@@ -40,6 +40,13 @@ public static class CodigosDeErro
     /// <summary>O mesmo arquivo de importação já foi processado (Specs/IMPORTACAO.md).</summary>
     public const string ArquivoJaImportado = "importacao.arquivo_ja_importado";
 
+    /// <summary>O relatório já foi emitido: só muda por retificação (Specs/RELATORIO_SERVICO.md).</summary>
+    public const string RelatorioNaoERascunho = "relatorio.nao_e_rascunho";
+
+    public const string RelatorioIncompleto = "relatorio.incompleto";
+    public const string ClienteSemDocumento = "relatorio.cliente_sem_documento";
+    public const string EmissorIncompleto = "relatorio.emissor_incompleto";
+
     public const string EmailEmUso = "usuario.email_em_uso";
     public const string SenhaInvalida = "usuario.senha_invalida";
     public const string SenhaAtualIncorreta = "usuario.senha_atual_incorreta";
