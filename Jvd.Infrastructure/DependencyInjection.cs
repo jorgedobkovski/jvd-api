@@ -74,6 +74,7 @@ public static class DependencyInjection
         services.AddSingleton<ILeitorDePlanilha, LeitorXlsx>();
         services.AddScoped<IImportacaoService, ImportacaoService>();
         services.AddScoped<IRelatorioService, RelatorioService>();
+        services.AddScoped<IRelatorioPdfService, RelatorioPdfService>();
         services.AddScoped<UsuarioSeeder>();
 
         return services;

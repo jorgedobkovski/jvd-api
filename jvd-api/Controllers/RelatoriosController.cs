@@ -15,7 +15,7 @@ namespace jvd_api.Controllers;
 [ApiController]
 [Route("api/relatorios")]
 [Authorize(Policy = Politicas.Tecnico)]
-public sealed class RelatoriosController(IRelatorioService servico) : ControllerBase
+public sealed class RelatoriosController(IRelatorioService servico, IRelatorioPdfService pdf) : ControllerBase
 {
     [HttpGet]
     [ProducesResponseType<PaginaResponse<RelatorioResumoResponse>>(StatusCodes.Status200OK)]
@@ -150,6 +150,31 @@ public sealed class RelatoriosController(IRelatorioService servico) : Controller
 
         var resultado = await servico.ListarRevisoesAsync(id, ator, ct);
         return resultado.Sucesso ? Ok(resultado.Valor!.Select(RevisaoResponse.De).ToList()) : this.Problema(resultado);
+    }
+
+    /// <summary>
+    /// PDF imprimível de um relatório emitido ou cancelado, gerado na hora. <c>via</c> (controle, cliente, fiscalizacao)
+    /// só muda o rótulo. Mesmo acesso do relatório; rascunho não tem PDF.
+    /// </summary>
+    [HttpGet("{id:guid}/pdf")]
+    [Produces("application/pdf")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Pdf(Guid id, [FromQuery] string? via, CancellationToken ct)
+    {
+        var escolhida = ViaDoRelatorio.Cliente;
+        if (!string.IsNullOrWhiteSpace(via) && !Enumeracoes.TentarConverter(via, out escolhida))
+            return Invalido("Via inválida. Use controle, cliente ou fiscalizacao.");
+
+        if (!TentarObterAtor(out var ator)) return Unauthorized();
+
+        var resultado = await pdf.GerarAsync(id, escolhida, ator, ct);
+        if (!resultado.Sucesso) return this.Problema(resultado);
+
+        Response.Headers.CacheControl = "no-store";
+        return File(resultado.Valor!.Conteudo, "application/pdf", resultado.Valor.NomeDoArquivo);
     }
 
     /// <summary>O ator vem SEMPRE do token (id e perfil), nunca do corpo ou da rota.</summary>
