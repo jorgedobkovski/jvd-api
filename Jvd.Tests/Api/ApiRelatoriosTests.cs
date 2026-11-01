@@ -41,7 +41,8 @@ public class ApiRelatoriosSemBancoTests(JvdApiFactory fabrica) : IClassFixture<J
             ["POST", $"/api/relatorios/{id}/emitir"],
             ["POST", $"/api/relatorios/{id}/retificar"],
             ["POST", $"/api/relatorios/{id}/cancelar"],
-            ["GET", $"/api/relatorios/{id}/revisoes"]
+            ["GET", $"/api/relatorios/{id}/revisoes"],
+            ["GET", $"/api/relatorios/{id}/pdf"]
         ];
     }
 
@@ -407,5 +408,78 @@ public class ApiRelatoriosComBancoTests : IClassFixture<BancoDeTeste>, IDisposab
 
         Assert.Equal(HttpStatusCode.Conflict, resposta.StatusCode);
         Assert.Equal("conflito", (await LerAsync(resposta)).GetProperty("codigo").GetString());
+    }
+
+    // ---------- 5: PDF ----------
+
+    [FactBanco]
+    public async Task Pdf_Emitido_DevolveArquivoPdf_ComViaEOutroTecnicoRecebe404()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (outro, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (gestor, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, _) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var id = emitido.GetProperty("id").GetGuid();
+
+        var resposta = await tecnico.GetAsync($"/api/relatorios/{id}/pdf?via=fiscalizacao");
+
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        Assert.Equal("application/pdf", resposta.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("no-store", resposta.Headers.CacheControl?.ToString());
+        var bytes = await resposta.Content.ReadAsByteArrayAsync();
+        Assert.StartsWith("%PDF", System.Text.Encoding.ASCII.GetString(bytes, 0, 4));
+        using (var pdf = UglyToad.PdfPig.PdfDocument.Open(bytes))
+        {
+            var texto = string.Join(" ", pdf.GetPages().Select(p => p.Text));
+            Assert.Contains(emitido.GetProperty("numeroFormatado").GetString()!, texto);
+            Assert.Contains("Via de fiscalização", texto);
+            Assert.Contains("Garantia: 30 dias (trinta)", texto);
+            Assert.DoesNotContain("30 dias (30 dias", texto);
+        }
+
+        Assert.Equal(HttpStatusCode.NotFound, (await outro.GetAsync($"/api/relatorios/{id}/pdf")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await gestor.GetAsync($"/api/relatorios/{id}/pdf")).StatusCode);
+    }
+
+    [FactBanco]
+    public async Task Pdf_RascunhoOuViaInvalida_RecebeErroEstavel()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (_, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, par) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var rascunho = await LerAsync(await tecnico.PostAsJsonAsync("/api/relatorios", Corpo(par)));
+
+        var doRascunho = await tecnico.GetAsync($"/api/relatorios/{rascunho.GetProperty("id").GetGuid()}/pdf");
+        Assert.Equal(HttpStatusCode.Conflict, doRascunho.StatusCode);
+        Assert.Equal("relatorio.nao_esta_emitido", (await LerAsync(doRascunho)).GetProperty("codigo").GetString());
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await tecnico.GetAsync($"/api/relatorios/{emitido.GetProperty("id").GetGuid()}/pdf?via=1")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await tecnico.GetAsync($"/api/relatorios/{Guid.NewGuid()}/pdf")).StatusCode);
+    }
+
+    [FactBanco]
+    public async Task Pdf_RetificadoECancelado_TrazemOsRotulos()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (_, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, _) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var id = emitido.GetProperty("id").GetGuid();
+
+        var retificado = await LerAsync(await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/retificar",
+            CorpoRetificacao(emitido, emitido.GetProperty("versao").GetString()!, "Ajuste")));
+        Assert.Contains("REVISÃO 1", await TextoDoPdfAsync(tecnico, id));
+
+        await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/cancelar", new { versao = retificado.GetProperty("versao").GetString(), motivo = "Cliente errado" });
+        var texto = await TextoDoPdfAsync(tecnico, id);
+        Assert.Contains("CANCELADO", texto);
+        Assert.DoesNotContain("Cliente errado", texto);
+    }
+
+    private static async Task<string> TextoDoPdfAsync(HttpClient http, Guid id)
+    {
+        var resposta = await http.GetAsync($"/api/relatorios/{id}/pdf");
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        using var pdf = UglyToad.PdfPig.PdfDocument.Open(await resposta.Content.ReadAsByteArrayAsync());
+        return string.Join(" ", pdf.GetPages().Select(p => p.Text));
     }
 }
