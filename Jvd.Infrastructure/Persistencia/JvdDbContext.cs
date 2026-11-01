@@ -26,6 +26,7 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
     public DbSet<Relatorio> Relatorios => Set<Relatorio>();
     public DbSet<RelatorioEvento> Eventos => Set<RelatorioEvento>();
     public DbSet<ContadorDeNumeracao> Contadores => Set<ContadorDeNumeracao>();
+    public DbSet<RelatorioRevisao> Revisoes => Set<RelatorioRevisao>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -188,7 +189,12 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             {
                 t.HasCheckConstraint("ck_relatorio_total_geral", "[total_geral] = [total] - [desconto]");
                 t.HasCheckConstraint("ck_relatorio_desconto", "[desconto] >= 0 AND [desconto] <= [total]");
-                t.HasCheckConstraint("ck_relatorio_garantia", "[garantia_dias] >= 0");
+                t.HasCheckConstraint("ck_relatorio_garantia", "[garantia_dias] >= 0 AND [garantia_dias] <= 9999");
+                t.HasCheckConstraint("ck_relatorio_revisao", "[revisao] >= 0");
+                // Cancelado sempre tem quando e motivo; os demais nunca têm.
+                t.HasCheckConstraint("ck_relatorio_cancelamento",
+                    "([status] = 'Cancelado' AND [cancelado_em] IS NOT NULL AND [cancelado_por] IS NOT NULL AND [motivo_cancelamento] IS NOT NULL) "
+                    + "OR ([status] <> 'Cancelado' AND [cancelado_em] IS NULL AND [cancelado_por] IS NULL AND [motivo_cancelamento] IS NULL)");
                 // Rascunho não tem número; emitido e cancelado sempre têm.
                 t.HasCheckConstraint("ck_relatorio_numero",
                     "([status] = 'Rascunho' AND [numero] IS NULL) OR ([status] <> 'Rascunho' AND [numero] IS NOT NULL)");
@@ -241,6 +247,19 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             e.HasIndex(x => new { x.RelatorioId, x.OcorridoEm });
             e.HasOne<Relatorio>().WithMany().HasForeignKey(x => x.RelatorioId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<Usuario>().WithMany().HasForeignKey(x => x.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<RelatorioRevisao>(e =>
+        {
+            e.ToTable("relatorio_revisao", t => t.HasCheckConstraint("ck_relatorio_revisao_numero", "[revisao] >= 1"));
+            e.HasKey(x => x.Id);
+            e.Property(x => x.RetificadoEm).HasColumnType("datetime2");
+            e.Property(x => x.Motivo).HasMaxLength(500).IsRequired();
+            e.Property(x => x.DadosAnteriores).HasColumnType("nvarchar(max)").IsRequired();
+            e.Property(x => x.DadosNovos).HasColumnType("nvarchar(max)").IsRequired();
+            e.HasIndex(x => new { x.RelatorioId, x.Revisao }).IsUnique();
+            e.HasOne<Relatorio>().WithMany().HasForeignKey(x => x.RelatorioId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Usuario>().WithMany().HasForeignKey(x => x.RetificadoPor).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<ContadorDeNumeracao>(e =>

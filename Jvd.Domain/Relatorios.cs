@@ -105,3 +105,23 @@ public sealed class ContadorDeNumeracao
     public string Chave { get; set; } = "";
     public int Ultimo { get; set; }
 }
+
+/// <summary>
+/// Histórico de retificações de um relatório emitido: quem, quando, por quê e o que mudou. Os JSON guardam só os
+/// campos alterados (valores antes e depois) e podem conter dados pessoais do cliente: mesmo acesso restrito do
+/// relatório, nunca em log. Único por (relatório, revisão).
+/// </summary>
+public sealed class RelatorioRevisao
+{
+    public Guid Id { get; set; }
+    public Guid RelatorioId { get; set; }
+
+    /// <summary>1, 2, … (a original é a revisão 0 e não gera linha aqui).</summary>
+    public int Revisao { get; set; }
+
+    public DateTime RetificadoEm { get; set; }
+    public Guid RetificadoPor { get; set; }
+    public string Motivo { get; set; } = "";
+    public string DadosAnteriores { get; set; } = "{}";
+    public string DadosNovos { get; set; } = "{}";
+}

@@ -38,7 +38,10 @@ public class ApiRelatoriosSemBancoTests(JvdApiFactory fabrica) : IClassFixture<J
             ["POST", "/api/relatorios"],
             ["PUT", $"/api/relatorios/{id}"],
             ["DELETE", $"/api/relatorios/{id}"],
-            ["POST", $"/api/relatorios/{id}/emitir"]
+            ["POST", $"/api/relatorios/{id}/emitir"],
+            ["POST", $"/api/relatorios/{id}/retificar"],
+            ["POST", $"/api/relatorios/{id}/cancelar"],
+            ["GET", $"/api/relatorios/{id}/revisoes"]
         ];
     }
 
@@ -256,5 +259,153 @@ public class ApiRelatoriosComBancoTests : IClassFixture<BancoDeTeste>, IDisposab
         });
         Assert.Equal(HttpStatusCode.BadRequest, tecnicoTentando.StatusCode);
         _ = outro;
+    }
+
+    // ---------- 4B: retificação, cancelamento, histórico ----------
+
+    private async Task<(JsonElement Emitido, (Guid ClienteId, Guid EquipamentoId) Par)> EmitirPeloHttpAsync(HttpClient http, Guid gestorId)
+    {
+        await CadastrosDeTeste.GarantirEmissorAsync(_fabrica.Services, gestorId);
+        var par = await NovoParAsync(gestorId);
+        var criado = await LerAsync(await http.PostAsJsonAsync("/api/relatorios", Corpo(par)));
+        var emitido = await http.PostAsJsonAsync($"/api/relatorios/{criado.GetProperty("id").GetGuid()}/emitir", new { versao = criado.GetProperty("versao").GetString() });
+        Assert.Equal(HttpStatusCode.OK, emitido.StatusCode);
+        return (await LerAsync(emitido), par);
+    }
+
+    private static object CorpoRetificacao(JsonElement r, string versao, string? motivo, string servico = "Serviço retificado", decimal total = 150m, bool atualizar = false) => new
+    {
+        versao, motivo, atualizarDadosDeCadastro = atualizar, tipoServico = r.GetProperty("tipoServico").GetString(),
+        dataServico = r.GetProperty("dataServico").GetString(), servicoExecutado = servico, observacoes = "Obs",
+        verificacaoAnteriorData = r.GetProperty("verificacaoAnteriorData").GetString(),
+        verificacaoAnteriorCertificado = r.GetProperty("verificacaoAnteriorCertificado").GetString(),
+        numeroSeloReparador = r.GetProperty("numeroSeloReparador").GetString(), garantiaDias = 30, total, desconto = 10m
+    };
+
+    [FactBanco]
+    public async Task Retificar_PeloHttp_MantemONumero_GeraRevisao_EOHistoricoMostraAntesEDepois()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (outro, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (gestor, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, _) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var id = emitido.GetProperty("id").GetGuid();
+        var numero = emitido.GetProperty("numeroFormatado").GetString();
+
+        var resposta = await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/retificar",
+            CorpoRetificacao(emitido, emitido.GetProperty("versao").GetString()!, "Valor digitado errado"));
+
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        var corpo = await LerAsync(resposta);
+        Assert.Equal(numero, corpo.GetProperty("numeroFormatado").GetString());
+        Assert.Equal(1, corpo.GetProperty("revisao").GetInt32());
+        Assert.Equal(140m, corpo.GetProperty("totalGeral").GetDecimal());
+
+        var historico = await LerAsync(await tecnico.GetAsync($"/api/relatorios/{id}/revisoes"));
+        var revisao = historico[0];
+        Assert.Equal(1, revisao.GetProperty("revisao").GetInt32());
+        Assert.Equal("Valor digitado errado", revisao.GetProperty("motivo").GetString());
+        Assert.Equal(100m, revisao.GetProperty("dadosAnteriores").GetProperty("total").GetDecimal());
+        Assert.Equal(150m, revisao.GetProperty("dadosNovos").GetProperty("total").GetDecimal());
+        Assert.Equal("Troca de peça", revisao.GetProperty("dadosAnteriores").GetProperty("servicoExecutado").GetString());
+
+        Assert.Equal(HttpStatusCode.NotFound, (await outro.GetAsync($"/api/relatorios/{id}/revisoes")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await gestor.GetAsync($"/api/relatorios/{id}/revisoes")).StatusCode);
+    }
+
+    [FactBanco]
+    public async Task Retificar_SemMotivo_SemAlteracaoOuRascunho_RetornaCodigosEstaveis()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (_, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, par) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var id = emitido.GetProperty("id").GetGuid();
+        var versao = emitido.GetProperty("versao").GetString()!;
+
+        var semMotivo = await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/retificar", CorpoRetificacao(emitido, versao, null));
+        Assert.Equal(HttpStatusCode.BadRequest, semMotivo.StatusCode);
+
+        var igual = await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/retificar", CorpoRetificacao(emitido, versao, "Nada mudou", "Troca de peça", 100m));
+        Assert.Equal(HttpStatusCode.BadRequest, igual.StatusCode);
+        Assert.Equal("relatorio.sem_alteracao", (await LerAsync(igual)).GetProperty("codigo").GetString());
+
+        var rascunho = await LerAsync(await tecnico.PostAsJsonAsync("/api/relatorios", Corpo(par)));
+        var emRascunho = await tecnico.PostAsJsonAsync($"/api/relatorios/{rascunho.GetProperty("id").GetGuid()}/retificar",
+            CorpoRetificacao(rascunho, rascunho.GetProperty("versao").GetString()!, "Tentativa"));
+        Assert.Equal(HttpStatusCode.Conflict, emRascunho.StatusCode);
+        Assert.Equal("relatorio.nao_esta_emitido", (await LerAsync(emRascunho)).GetProperty("codigo").GetString());
+    }
+
+    [FactBanco]
+    public async Task Retificar_CamposInternosEClienteNoCorpo_SaoIgnorados()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (_, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, _) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var id = emitido.GetProperty("id").GetGuid();
+
+        var resposta = await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/retificar", new
+        {
+            versao = emitido.GetProperty("versao").GetString(), motivo = "Ajuste", tipoServico = "Corretiva", dataServico = "2026-10-30",
+            servicoExecutado = "Outro texto", total = 100m, desconto = 10m, garantiaDias = 30,
+            clienteId = Guid.NewGuid(), equipamentoId = Guid.NewGuid(), tecnicoId = Guid.NewGuid(), numero = 999999, status = "Cancelado",
+            revisao = 50, totalGeral = 1m, emitidoPor = Guid.NewGuid()
+        });
+
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        var corpo = await LerAsync(resposta);
+        Assert.Equal(emitido.GetProperty("clienteId").GetGuid(), corpo.GetProperty("clienteId").GetGuid());
+        Assert.Equal(emitido.GetProperty("equipamentoId").GetGuid(), corpo.GetProperty("equipamentoId").GetGuid());
+        Assert.Equal(emitido.GetProperty("tecnicoId").GetGuid(), corpo.GetProperty("tecnicoId").GetGuid());
+        Assert.Equal(emitido.GetProperty("numero").GetInt32(), corpo.GetProperty("numero").GetInt32());
+        Assert.Equal("Emitido", corpo.GetProperty("status").GetString());
+        Assert.Equal(1, corpo.GetProperty("revisao").GetInt32());
+        Assert.Equal(90m, corpo.GetProperty("totalGeral").GetDecimal());
+    }
+
+    [FactBanco]
+    public async Task Cancelar_PeloHttp_GravaMotivo_MantemONumero_E409AoRepetir()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (outro, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (gestor, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, _) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var id = emitido.GetProperty("id").GetGuid();
+        var versao = emitido.GetProperty("versao").GetString();
+
+        Assert.Equal(HttpStatusCode.NotFound, (await outro.PostAsJsonAsync($"/api/relatorios/{id}/cancelar", new { versao, motivo = "Intruso" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/cancelar", new { versao })).StatusCode);   // sem motivo
+
+        var resposta = await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/cancelar", new { versao, motivo = "Emitido para o cliente errado" });
+
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        var corpo = await LerAsync(resposta);
+        Assert.Equal("Cancelado", corpo.GetProperty("status").GetString());
+        Assert.Equal(emitido.GetProperty("numeroFormatado").GetString(), corpo.GetProperty("numeroFormatado").GetString());
+        Assert.Equal("Emitido para o cliente errado", corpo.GetProperty("motivoCancelamento").GetString());
+        Assert.NotEqual(JsonValueKind.Null, corpo.GetProperty("canceladoEm").ValueKind);
+
+        var denovo = await gestor.PostAsJsonAsync($"/api/relatorios/{id}/cancelar", new { versao = corpo.GetProperty("versao").GetString(), motivo = "De novo" });
+        Assert.Equal(HttpStatusCode.Conflict, denovo.StatusCode);
+        Assert.Equal("relatorio.nao_esta_emitido", (await LerAsync(denovo)).GetProperty("codigo").GetString());
+
+        var comoCancelado = await tecnico.GetAsync($"/api/relatorios?status=Cancelado&numero={emitido.GetProperty("numero").GetInt32()}");
+        Assert.Equal(1, (await LerAsync(comoCancelado)).GetProperty("total").GetInt32());
+    }
+
+    [FactBanco]
+    public async Task Cancelar_VersaoVelha_Retorna409Conflito()
+    {
+        var (tecnico, _) = await LogarAsync(PerfilUsuario.Tecnico);
+        var (_, gestorId) = await LogarAsync(PerfilUsuario.Gestor);
+        var (emitido, _) = await EmitirPeloHttpAsync(tecnico, gestorId);
+        var id = emitido.GetProperty("id").GetGuid();
+        var versaoVelha = emitido.GetProperty("versao").GetString()!;
+        Assert.Equal(HttpStatusCode.OK, (await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/retificar", CorpoRetificacao(emitido, versaoVelha, "Ajuste"))).StatusCode);
+
+        var resposta = await tecnico.PostAsJsonAsync($"/api/relatorios/{id}/cancelar", new { versao = versaoVelha, motivo = "Motivo" });
+
+        Assert.Equal(HttpStatusCode.Conflict, resposta.StatusCode);
+        Assert.Equal("conflito", (await LerAsync(resposta)).GetProperty("codigo").GetString());
     }
 }

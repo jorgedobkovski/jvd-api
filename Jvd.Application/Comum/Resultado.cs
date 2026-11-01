@@ -43,6 +43,12 @@ public static class CodigosDeErro
     /// <summary>O relatório já foi emitido: só muda por retificação (Specs/RELATORIO_SERVICO.md).</summary>
     public const string RelatorioNaoERascunho = "relatorio.nao_e_rascunho";
 
+    /// <summary>Só se retifica ou cancela um relatório emitido (rascunho se edita/descarta; cancelado não volta).</summary>
+    public const string RelatorioNaoEmitido = "relatorio.nao_esta_emitido";
+
+    /// <summary>Uma retificação precisa mudar alguma coisa.</summary>
+    public const string RetificacaoSemAlteracao = "relatorio.sem_alteracao";
+
     public const string RelatorioIncompleto = "relatorio.incompleto";
     public const string ClienteSemDocumento = "relatorio.cliente_sem_documento";
     public const string EmissorIncompleto = "relatorio.emissor_incompleto";

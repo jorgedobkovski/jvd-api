@@ -12,7 +12,7 @@ public static class RespostasDeErro
         var status = primeiro.Codigo switch
         {
             CodigosDeErro.NaoEncontrado => StatusCodes.Status404NotFound,
-            CodigosDeErro.EmailEmUso or CodigosDeErro.ArquivoJaImportado or CodigosDeErro.RelatorioNaoERascunho or CodigosDeErro.UltimoGestor or CodigosDeErro.NaoPodeAgirEmSi or CodigosDeErro.Conflito
+            CodigosDeErro.EmailEmUso or CodigosDeErro.ArquivoJaImportado or CodigosDeErro.RelatorioNaoERascunho or CodigosDeErro.RelatorioNaoEmitido or CodigosDeErro.UltimoGestor or CodigosDeErro.NaoPodeAgirEmSi or CodigosDeErro.Conflito
                 => StatusCodes.Status409Conflict,
             CodigosDeErro.SessaoInvalida => StatusCodes.Status401Unauthorized,
             _ => StatusCodes.Status400BadRequest
