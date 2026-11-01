@@ -58,6 +58,50 @@ public sealed class AtualizarRelatorioRequest
         VerificacaoAnteriorCertificado, NumeroSeloReparador, GarantiaDias, Total, Desconto, CatalogoServicoId);
 }
 
+/// <summary>
+/// Retificação de um relatório emitido. Cliente, equipamento e executor NÃO podem ser alterados por aqui (cancela-se e
+/// emite-se outro); status, número e revisão também não existem no corpo.
+/// </summary>
+public sealed class RetificarRelatorioRequest
+{
+    [Required, StringLength(64)] public string Versao { get; init; } = "";
+    [Required, StringLength(5000)] public string Motivo { get; init; } = "";
+
+    /// <summary>Refaz os dados do cliente e do equipamento a partir do cadastro atual (para corrigir dado cadastral).</summary>
+    public bool AtualizarDadosDeCadastro { get; init; }
+
+    [Required, StringLength(20)] public string TipoServico { get; init; } = "";
+    [Required] public DateOnly? DataServico { get; init; }
+    [StringLength(20000)] public string? ServicoExecutado { get; init; }
+    [StringLength(20000)] public string? Observacoes { get; init; }
+    public DateOnly? VerificacaoAnteriorData { get; init; }
+    [StringLength(500)] public string? VerificacaoAnteriorCertificado { get; init; }
+    [StringLength(500)] public string? NumeroSeloReparador { get; init; }
+    public int GarantiaDias { get; init; }
+    public decimal Total { get; init; }
+    public decimal Desconto { get; init; }
+    public Guid? CatalogoServicoId { get; init; }
+
+    public DadosDaRetificacao ParaDados(TipoServico tipo) => new(
+        Motivo, tipo, DataServico!.Value, ServicoExecutado, Observacoes, VerificacaoAnteriorData, VerificacaoAnteriorCertificado,
+        NumeroSeloReparador, GarantiaDias, Total, Desconto, CatalogoServicoId, AtualizarDadosDeCadastro);
+}
+
+public sealed class CancelarRelatorioRequest
+{
+    [Required, StringLength(64)] public string Versao { get; init; } = "";
+    [Required, StringLength(5000)] public string Motivo { get; init; } = "";
+}
+
+public sealed record RevisaoResponse(
+    int Revisao, DateTime RetificadoEm, Guid RetificadoPor, string RetificadoPorNome, string Motivo,
+    System.Text.Json.JsonElement DadosAnteriores, System.Text.Json.JsonElement DadosNovos)
+{
+    public static RevisaoResponse De(RevisaoDoRelatorio r) => new(
+        r.Revisao, DateTime.SpecifyKind(r.RetificadoEm, DateTimeKind.Utc), r.RetificadoPor, r.RetificadoPorNome, r.Motivo,
+        r.DadosAnteriores, r.DadosNovos);
+}
+
 public sealed class VersaoRequest
 {
     [Required, StringLength(64)] public string Versao { get; init; } = "";
@@ -79,14 +123,16 @@ public sealed record RelatorioResponse(
     string ServicoExecutado, string? Observacoes, DateOnly? VerificacaoAnteriorData, string? VerificacaoAnteriorCertificado,
     string? NumeroSeloReparador, int GarantiaDias, string GarantiaExtenso, decimal Total, decimal Desconto,
     decimal TotalGeral, Guid? CatalogoServicoId, int Revisao, SnapshotDoCliente? Cliente, SnapshotDoEquipamento? Equipamento,
-    SnapshotDoEmissor? Emissor, DateTime? EmitidoEm, Guid? EmitidoPor, DateTime CriadoEm, DateTime AtualizadoEm, string Versao)
+    SnapshotDoEmissor? Emissor, DateTime? EmitidoEm, Guid? EmitidoPor, DateTime? CanceladoEm, Guid? CanceladoPor,
+    string? MotivoCancelamento, DateTime CriadoEm, DateTime AtualizadoEm, string Versao)
 {
     public static RelatorioResponse De(RelatorioDetalhe r) => new(
         r.Id, r.Numero, r.NumeroFormatado, r.Status.ToString(), r.TipoServico.ToString(), r.DataServico, r.ClienteId,
         r.ClienteNome, r.EquipamentoId, r.EquipamentoDescricao, r.TecnicoId, r.TecnicoNome, r.ServicoExecutado,
         r.Observacoes, r.VerificacaoAnteriorData, r.VerificacaoAnteriorCertificado, r.NumeroSeloReparador, r.GarantiaDias,
         r.GarantiaExtenso, r.Total, r.Desconto, r.TotalGeral, r.CatalogoServicoId, r.Revisao, r.Cliente, r.Equipamento,
-        r.Emissor, Utc(r.EmitidoEm), r.EmitidoPor, DateTime.SpecifyKind(r.CriadoEm, DateTimeKind.Utc),
+        r.Emissor, Utc(r.EmitidoEm), r.EmitidoPor, Utc(r.CanceladoEm), r.CanceladoPor, r.MotivoCancelamento,
+        DateTime.SpecifyKind(r.CriadoEm, DateTimeKind.Utc),
         DateTime.SpecifyKind(r.AtualizadoEm, DateTimeKind.Utc), r.Versao);
 
     private static DateTime? Utc(DateTime? valor) => valor is { } v ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : null;

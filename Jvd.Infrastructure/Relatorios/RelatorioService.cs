@@ -43,7 +43,9 @@ public sealed class RelatorioService(JvdDbContext db, TimeProvider relogio, ILog
             .Skip((pagina - 1) * tamanho).Take(tamanho)
             .Select(r => new LinhaDeLista
             {
-                Relatorio = r,
+                Id = r.Id, Numero = r.Numero, Status = r.Status, TipoServico = r.TipoServico, DataServico = r.DataServico,
+                ClienteId = r.ClienteId, EquipamentoId = r.EquipamentoId, TecnicoId = r.TecnicoId, TotalGeral = r.TotalGeral,
+                Revisao = r.Revisao, ClienteSnapshot = r.ClienteSnapshot, EquipamentoSnapshot = r.EquipamentoSnapshot,
                 ClienteNome = db.Clientes.Where(c => c.Id == r.ClienteId).Select(c => c.NomeRazaoSocial).FirstOrDefault() ?? "",
                 EquipamentoDescricao = db.Equipamentos.Where(e => e.Id == r.EquipamentoId).Select(e => e.Descricao).FirstOrDefault() ?? "",
                 TecnicoNome = db.Users.Where(u => u.Id == r.TecnicoId).Select(u => u.Nome).FirstOrDefault() ?? ""
@@ -240,6 +242,226 @@ public sealed class RelatorioService(JvdDbContext db, TimeProvider relogio, ILog
         }
     }
 
+    // ---------- retificação ----------
+
+    public async Task<Resultado<RelatorioDetalhe>> RetificarAsync(
+        Guid id, DadosDaRetificacao dados, string versao, AtorDoRelatorio ator, CancellationToken ct = default)
+    {
+        if (!Versao.TentarDecodificar(versao, out var versaoRecebida))
+        {
+            return Resultado<RelatorioDetalhe>.Falha(Validacao("Versão do relatório inválida."));
+        }
+
+        var relatorio = await Visiveis(db.Relatorios, ator).SingleOrDefaultAsync(r => r.Id == id, ct);
+        if (relatorio is null) return NaoEncontrado<RelatorioDetalhe>();
+        if (relatorio.Status != StatusRelatorio.Emitido) return NaoEmitido<RelatorioDetalhe>();
+
+        var motivo = Campos.Normalizar(dados.Motivo);
+        var erros = new List<ErroNegocio>();
+        if (motivo is null || Campos.Excede(motivo, 500)) erros.Add(Validacao("O motivo da retificação é obrigatório (até 500 caracteres)."));
+        if (string.IsNullOrWhiteSpace(dados.ServicoExecutado)) erros.Add(Validacao("O serviço executado é obrigatório."));
+
+        // Cliente, equipamento e executor não mudam por retificação: validam-se só os campos que ela altera.
+        erros.AddRange(Validar(new DadosDoRelatorio(
+            relatorio.ClienteId, relatorio.EquipamentoId, null, dados.TipoServico, dados.DataServico, dados.ServicoExecutado,
+            dados.Observacoes, dados.VerificacaoAnteriorData, dados.VerificacaoAnteriorCertificado, dados.NumeroSeloReparador,
+            dados.GarantiaDias, dados.Total, dados.Desconto, dados.CatalogoServicoId)));
+
+        if (dados.CatalogoServicoId is { } catalogo && catalogo != relatorio.CatalogoServicoId
+            && !await db.Catalogo.AsNoTracking().AnyAsync(c => c.Id == catalogo, ct))
+        {
+            erros.Add(Validacao("Serviço do catálogo inexistente."));
+        }
+
+        if (erros.Count > 0) return Resultado<RelatorioDetalhe>.Falha(erros);
+
+        // O que mudou: só estes campos vão para o histórico (valores antes e depois).
+        var antes = new Dictionary<string, object?>();
+        var depois = new Dictionary<string, object?>();
+
+        void Comparar<T>(string campo, T atual, T novo)
+        {
+            if (EqualityComparer<T>.Default.Equals(atual, novo)) return;
+            antes[campo] = atual;
+            depois[campo] = novo;
+        }
+
+        var servico = Campos.Normalizar(dados.ServicoExecutado)!;
+        var observacoes = Campos.Normalizar(dados.Observacoes);
+        var certificado = Campos.Normalizar(dados.VerificacaoAnteriorCertificado);
+        var selo = Campos.Normalizar(dados.NumeroSeloReparador);
+        var totalGeral = dados.Total - dados.Desconto;
+
+        Comparar("tipoServico", relatorio.TipoServico.ToString(), dados.TipoServico.ToString());
+        Comparar("dataServico", relatorio.DataServico, dados.DataServico);
+        Comparar("servicoExecutado", relatorio.ServicoExecutado, servico);
+        Comparar("observacoes", relatorio.Observacoes, observacoes);
+        Comparar("verificacaoAnteriorData", relatorio.VerificacaoAnteriorData, dados.VerificacaoAnteriorData);
+        Comparar("verificacaoAnteriorCertificado", relatorio.VerificacaoAnteriorCertificado, certificado);
+        Comparar("numeroSeloReparador", relatorio.NumeroSeloReparador, selo);
+        Comparar("garantiaDias", relatorio.GarantiaDias, dados.GarantiaDias);
+        Comparar("total", relatorio.Total, dados.Total);
+        Comparar("desconto", relatorio.Desconto, dados.Desconto);
+        Comparar("totalGeral", relatorio.TotalGeral, totalGeral);
+        Comparar("catalogoServicoId", relatorio.CatalogoServicoId, dados.CatalogoServicoId);
+
+        string? novoSnapshotDoCliente = null, novoSnapshotDoEquipamento = null;
+        if (dados.AtualizarDadosDeCadastro)
+        {
+            var cliente = await db.Clientes.AsNoTracking().SingleOrDefaultAsync(c => c.Id == relatorio.ClienteId, ct);
+            var equipamento = await db.Equipamentos.AsNoTracking().SingleOrDefaultAsync(e => e.Id == relatorio.EquipamentoId, ct);
+            if (cliente is null || equipamento is null) return Resultado<RelatorioDetalhe>.Falha(Validacao("Cliente ou equipamento inexistente."));
+
+            if (string.IsNullOrEmpty(cliente.Documento))
+            {
+                return Resultado<RelatorioDetalhe>.Falha(new ErroNegocio(
+                    CodigosDeErro.ClienteSemDocumento, "O cliente não tem CPF/CNPJ: complete o cadastro antes de atualizar o relatório."));
+            }
+
+            novoSnapshotDoCliente = JsonSerializer.Serialize(SnapshotDe(cliente), Json);
+            novoSnapshotDoEquipamento = JsonSerializer.Serialize(SnapshotDe(equipamento), Json);
+
+            if (novoSnapshotDoCliente != relatorio.ClienteSnapshot)
+            {
+                antes["cliente"] = Ler<SnapshotDoCliente>(relatorio.ClienteSnapshot);
+                depois["cliente"] = Ler<SnapshotDoCliente>(novoSnapshotDoCliente);
+            }
+
+            if (novoSnapshotDoEquipamento != relatorio.EquipamentoSnapshot)
+            {
+                antes["equipamento"] = Ler<SnapshotDoEquipamento>(relatorio.EquipamentoSnapshot);
+                depois["equipamento"] = Ler<SnapshotDoEquipamento>(novoSnapshotDoEquipamento);
+            }
+        }
+
+        if (antes.Count == 0)
+        {
+            return Resultado<RelatorioDetalhe>.Falha(new ErroNegocio(CodigosDeErro.RetificacaoSemAlteracao, "A retificação não altera nada."));
+        }
+
+        var agora = relogio.GetUtcNow().UtcDateTime;
+        relatorio.TipoServico = dados.TipoServico;
+        relatorio.DataServico = dados.DataServico;
+        relatorio.ServicoExecutado = servico;
+        relatorio.Observacoes = observacoes;
+        relatorio.VerificacaoAnteriorData = dados.VerificacaoAnteriorData;
+        relatorio.VerificacaoAnteriorCertificado = certificado;
+        relatorio.NumeroSeloReparador = selo;
+        relatorio.GarantiaDias = dados.GarantiaDias;
+        relatorio.Total = dados.Total;
+        relatorio.Desconto = dados.Desconto;
+        relatorio.TotalGeral = totalGeral;
+        relatorio.CatalogoServicoId = dados.CatalogoServicoId;
+        if (novoSnapshotDoCliente is not null) relatorio.ClienteSnapshot = novoSnapshotDoCliente;
+        if (novoSnapshotDoEquipamento is not null) relatorio.EquipamentoSnapshot = novoSnapshotDoEquipamento;
+        relatorio.Revisao += 1;
+        relatorio.AtualizadoEm = agora;
+        db.Entry(relatorio).Property(r => r.Versao).OriginalValue = versaoRecebida;
+
+        db.Revisoes.Add(new RelatorioRevisao
+        {
+            Id = Guid.NewGuid(), RelatorioId = relatorio.Id, Revisao = relatorio.Revisao, RetificadoEm = agora, RetificadoPor = ator.Id,
+            Motivo = motivo!, DadosAnteriores = JsonSerializer.Serialize(antes, Json), DadosNovos = JsonSerializer.Serialize(depois, Json)
+        });
+        RegistrarEvento(relatorio.Id, TipoEventoRelatorio.Retificado, ator.Id, agora, $"Retificado (revisão {relatorio.Revisao}).");
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Resultado<RelatorioDetalhe>.Falha(new ErroNegocio(CodigosDeErro.Conflito, Versao.MensagemDeConflito("relatório")));
+        }
+        catch (DbUpdateException ex) when (Concorrencia.EhChaveDuplicada(ex))
+        {
+            // Duas retificações com a mesma revisão ao mesmo tempo: a outra venceu.
+            return Resultado<RelatorioDetalhe>.Falha(new ErroNegocio(CodigosDeErro.Conflito, Versao.MensagemDeConflito("relatório")));
+        }
+        catch (Exception ex) when (Concorrencia.EhDeadlock(ex))
+        {
+            return Resultado<RelatorioDetalhe>.Falha(Concorrencia.Conflito());
+        }
+
+        log.LogInformation("Relatório {RelatorioId} retificado por {AtorId} (revisão {Revisao}).", relatorio.Id, ator.Id, relatorio.Revisao);
+        return Resultado<RelatorioDetalhe>.Ok(await DetalharAsync(relatorio, ct));
+    }
+
+    // ---------- cancelamento ----------
+
+    public async Task<Resultado<RelatorioDetalhe>> CancelarAsync(
+        Guid id, string? motivo, string versao, AtorDoRelatorio ator, CancellationToken ct = default)
+    {
+        if (!Versao.TentarDecodificar(versao, out var versaoRecebida))
+        {
+            return Resultado<RelatorioDetalhe>.Falha(Validacao("Versão do relatório inválida."));
+        }
+
+        var relatorio = await Visiveis(db.Relatorios, ator).SingleOrDefaultAsync(r => r.Id == id, ct);
+        if (relatorio is null) return NaoEncontrado<RelatorioDetalhe>();
+        if (relatorio.Status != StatusRelatorio.Emitido) return NaoEmitido<RelatorioDetalhe>();
+
+        var texto = Campos.Normalizar(motivo);
+        if (texto is null || Campos.Excede(texto, 500))
+        {
+            return Resultado<RelatorioDetalhe>.Falha(Validacao("O motivo do cancelamento é obrigatório (até 500 caracteres)."));
+        }
+
+        var agora = relogio.GetUtcNow().UtcDateTime;
+        relatorio.Status = StatusRelatorio.Cancelado;
+        relatorio.CanceladoEm = agora;
+        relatorio.CanceladoPor = ator.Id;
+        relatorio.MotivoCancelamento = texto;
+        relatorio.AtualizadoEm = agora;
+        db.Entry(relatorio).Property(r => r.Versao).OriginalValue = versaoRecebida;
+        RegistrarEvento(relatorio.Id, TipoEventoRelatorio.Cancelado, ator.Id, agora, "Relatório cancelado."); // o motivo fica no relatório, não na trilha
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Resultado<RelatorioDetalhe>.Falha(new ErroNegocio(CodigosDeErro.Conflito, Versao.MensagemDeConflito("relatório")));
+        }
+        catch (Exception ex) when (Concorrencia.EhDeadlock(ex))
+        {
+            return Resultado<RelatorioDetalhe>.Falha(Concorrencia.Conflito());
+        }
+
+        log.LogInformation("Relatório {RelatorioId} cancelado por {AtorId}.", relatorio.Id, ator.Id);
+        return Resultado<RelatorioDetalhe>.Ok(await DetalharAsync(relatorio, ct));
+    }
+
+    // ---------- histórico ----------
+
+    public async Task<Resultado<IReadOnlyList<RevisaoDoRelatorio>>> ListarRevisoesAsync(
+        Guid id, AtorDoRelatorio ator, CancellationToken ct = default)
+    {
+        if (!await Visiveis(db.Relatorios.AsNoTracking(), ator).AnyAsync(r => r.Id == id, ct))
+        {
+            return NaoEncontrado<IReadOnlyList<RevisaoDoRelatorio>>();
+        }
+
+        var linhas = await db.Revisoes.AsNoTracking().Where(v => v.RelatorioId == id).OrderBy(v => v.Revisao)
+            .Select(v => new
+            {
+                v.Revisao, v.RetificadoEm, v.RetificadoPor, v.Motivo, v.DadosAnteriores, v.DadosNovos,
+                Nome = db.Users.Where(u => u.Id == v.RetificadoPor).Select(u => u.Nome).FirstOrDefault() ?? ""
+            })
+            .ToListAsync(ct);
+
+        IReadOnlyList<RevisaoDoRelatorio> revisoes = linhas.Select(l => new RevisaoDoRelatorio(
+            l.Revisao, l.RetificadoEm, l.RetificadoPor, l.Nome, l.Motivo, Elemento(l.DadosAnteriores), Elemento(l.DadosNovos))).ToList();
+        return Resultado<IReadOnlyList<RevisaoDoRelatorio>>.Ok(revisoes);
+    }
+
+    private static JsonElement Elemento(string json)
+    {
+        using var documento = JsonDocument.Parse(json);
+        return documento.RootElement.Clone();
+    }
+
     /// <summary>
     /// Incrementa o contador e lê o valor na mesma transação. O UPDATE mantém a linha travada até o fim da transação:
     /// outra emissão espera, e se esta falhar o incremento é desfeito (a sequência não ganha buracos).
@@ -344,12 +566,25 @@ public sealed class RelatorioService(JvdDbContext db, TimeProvider relogio, ILog
             r.EquipamentoId, equipamentoDescricao, r.TecnicoId, tecnicoNome, r.ServicoExecutado, r.Observacoes,
             r.VerificacaoAnteriorData, r.VerificacaoAnteriorCertificado, r.NumeroSeloReparador, r.GarantiaDias,
             Extenso.Garantia(r.GarantiaDias), r.Total, r.Desconto, r.TotalGeral, r.CatalogoServicoId, r.Revisao,
-            cliente, equipamento, emissor, r.EmitidoEm, r.EmitidoPor, r.CriadoEm, r.AtualizadoEm, Versao.Codificar(r.Versao));
+            cliente, equipamento, emissor, r.EmitidoEm, r.EmitidoPor, r.CanceladoEm, r.CanceladoPor, r.MotivoCancelamento,
+            r.CriadoEm, r.AtualizadoEm, Versao.Codificar(r.Versao));
     }
 
+    /// <summary>Só as colunas que o resumo usa: a listagem não carrega o texto do serviço nem o snapshot do emissor.</summary>
     private sealed class LinhaDeLista
     {
-        public required Relatorio Relatorio { get; init; }
+        public required Guid Id { get; init; }
+        public required int? Numero { get; init; }
+        public required StatusRelatorio Status { get; init; }
+        public required TipoServico TipoServico { get; init; }
+        public required DateOnly DataServico { get; init; }
+        public required Guid ClienteId { get; init; }
+        public required Guid EquipamentoId { get; init; }
+        public required Guid TecnicoId { get; init; }
+        public required decimal TotalGeral { get; init; }
+        public required int Revisao { get; init; }
+        public required string? ClienteSnapshot { get; init; }
+        public required string? EquipamentoSnapshot { get; init; }
         public required string ClienteNome { get; init; }
         public required string EquipamentoDescricao { get; init; }
         public required string TecnicoNome { get; init; }
@@ -357,12 +592,11 @@ public sealed class RelatorioService(JvdDbContext db, TimeProvider relogio, ILog
 
     private static RelatorioResumo Resumo(LinhaDeLista l)
     {
-        var r = l.Relatorio;
         // O emitido mostra os nomes da cópia da emissão, não os do cadastro de hoje.
-        var cliente = Ler<SnapshotDoCliente>(r.ClienteSnapshot)?.Nome ?? l.ClienteNome;
-        var equipamento = Ler<SnapshotDoEquipamento>(r.EquipamentoSnapshot)?.Descricao ?? l.EquipamentoDescricao;
-        return new RelatorioResumo(r.Id, r.Numero, Formatar(r.Numero), r.Status, r.TipoServico, r.DataServico, r.ClienteId,
-            cliente, r.EquipamentoId, equipamento, r.TecnicoId, l.TecnicoNome, r.TotalGeral, r.Revisao);
+        var cliente = Ler<SnapshotDoCliente>(l.ClienteSnapshot)?.Nome ?? l.ClienteNome;
+        var equipamento = Ler<SnapshotDoEquipamento>(l.EquipamentoSnapshot)?.Descricao ?? l.EquipamentoDescricao;
+        return new RelatorioResumo(l.Id, l.Numero, Formatar(l.Numero), l.Status, l.TipoServico, l.DataServico, l.ClienteId,
+            cliente, l.EquipamentoId, equipamento, l.TecnicoId, l.TecnicoNome, l.TotalGeral, l.Revisao);
     }
 
     private static string? Formatar(int? numero) => numero?.ToString("D6", CultureInfo.InvariantCulture);
@@ -394,6 +628,9 @@ public sealed class RelatorioService(JvdDbContext db, TimeProvider relogio, ILog
 
     private static Resultado NaoEncontrado() =>
         Resultado.Falha(new ErroNegocio(CodigosDeErro.NaoEncontrado, "Relatório não encontrado."));
+
+    private static Resultado<T> NaoEmitido<T>() => Resultado<T>.Falha(new ErroNegocio(
+        CodigosDeErro.RelatorioNaoEmitido, "Só um relatório emitido pode ser retificado ou cancelado."));
 
     private static Resultado<T> NaoERascunho<T>() => Resultado<T>.Falha(ErroNaoERascunho());
 

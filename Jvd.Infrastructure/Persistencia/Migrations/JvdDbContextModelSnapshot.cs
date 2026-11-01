@@ -613,11 +613,15 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
 
                     b.ToTable("relatorio", null, t =>
                         {
+                            t.HasCheckConstraint("ck_relatorio_cancelamento", "([status] = 'Cancelado' AND [cancelado_em] IS NOT NULL AND [cancelado_por] IS NOT NULL AND [motivo_cancelamento] IS NOT NULL) OR ([status] <> 'Cancelado' AND [cancelado_em] IS NULL AND [cancelado_por] IS NULL AND [motivo_cancelamento] IS NULL)");
+
                             t.HasCheckConstraint("ck_relatorio_desconto", "[desconto] >= 0 AND [desconto] <= [total]");
 
-                            t.HasCheckConstraint("ck_relatorio_garantia", "[garantia_dias] >= 0");
+                            t.HasCheckConstraint("ck_relatorio_garantia", "[garantia_dias] >= 0 AND [garantia_dias] <= 9999");
 
                             t.HasCheckConstraint("ck_relatorio_numero", "([status] = 'Rascunho' AND [numero] IS NULL) OR ([status] <> 'Rascunho' AND [numero] IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_relatorio_revisao", "[revisao] >= 0");
 
                             t.HasCheckConstraint("ck_relatorio_total_geral", "[total_geral] = [total] - [desconto]");
                         });
@@ -660,6 +664,58 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.HasIndex("RelatorioId", "OcorridoEm");
 
                     b.ToTable("relatorio_evento", (string)null);
+                });
+
+            modelBuilder.Entity("Jvd.Domain.RelatorioRevisao", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<string>("DadosAnteriores")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("dados_anteriores");
+
+                    b.Property<string>("DadosNovos")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("dados_novos");
+
+                    b.Property<string>("Motivo")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("motivo");
+
+                    b.Property<Guid>("RelatorioId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("relatorio_id");
+
+                    b.Property<DateTime>("RetificadoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("retificado_em");
+
+                    b.Property<Guid>("RetificadoPor")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("retificado_por");
+
+                    b.Property<int>("Revisao")
+                        .HasColumnType("int")
+                        .HasColumnName("revisao");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RetificadoPor");
+
+                    b.HasIndex("RelatorioId", "Revisao")
+                        .IsUnique();
+
+                    b.ToTable("relatorio_revisao", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_relatorio_revisao_numero", "[revisao] >= 1");
+                        });
                 });
 
             modelBuilder.Entity("Jvd.Domain.ServicoCatalogo", b =>
@@ -1027,6 +1083,21 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.HasOne("Jvd.Infrastructure.Identity.Usuario", null)
                         .WithMany()
                         .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jvd.Domain.RelatorioRevisao", b =>
+                {
+                    b.HasOne("Jvd.Domain.Relatorio", null)
+                        .WithMany()
+                        .HasForeignKey("RelatorioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Jvd.Infrastructure.Identity.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("RetificadoPor")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

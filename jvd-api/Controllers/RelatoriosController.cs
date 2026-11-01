@@ -111,6 +111,47 @@ public sealed class RelatoriosController(IRelatorioService servico) : Controller
         return resultado.Sucesso ? Ok(RelatorioResponse.De(resultado.Valor!)) : this.Problema(resultado);
     }
 
+    /// <summary>Altera um relatório emitido com histórico: exige motivo, mantém o número e incrementa a revisão.</summary>
+    [HttpPost("{id:guid}/retificar")]
+    [ProducesResponseType<RelatorioResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Retificar(Guid id, [FromBody] RetificarRelatorioRequest pedido, CancellationToken ct)
+    {
+        if (!Enumeracoes.TentarConverter<TipoServico>(pedido.TipoServico, out var tipo)) return Invalido("Tipo de serviço inválido.");
+        if (!TentarObterAtor(out var ator)) return Unauthorized();
+
+        var resultado = await servico.RetificarAsync(id, pedido.ParaDados(tipo), pedido.Versao, ator, ct);
+        return resultado.Sucesso ? Ok(RelatorioResponse.De(resultado.Valor!)) : this.Problema(resultado);
+    }
+
+    /// <summary>Cancela um relatório emitido (motivo obrigatório). O número é mantido e nunca reutilizado.</summary>
+    [HttpPost("{id:guid}/cancelar")]
+    [ProducesResponseType<RelatorioResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Cancelar(Guid id, [FromBody] CancelarRelatorioRequest pedido, CancellationToken ct)
+    {
+        if (!TentarObterAtor(out var ator)) return Unauthorized();
+
+        var resultado = await servico.CancelarAsync(id, pedido.Motivo, pedido.Versao, ator, ct);
+        return resultado.Sucesso ? Ok(RelatorioResponse.De(resultado.Valor!)) : this.Problema(resultado);
+    }
+
+    /// <summary>Histórico de retificações (mesmo acesso do relatório: o técnico só vê o dos seus).</summary>
+    [HttpGet("{id:guid}/revisoes")]
+    [ProducesResponseType<IReadOnlyList<RevisaoResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Revisoes(Guid id, CancellationToken ct)
+    {
+        if (!TentarObterAtor(out var ator)) return Unauthorized();
+
+        var resultado = await servico.ListarRevisoesAsync(id, ator, ct);
+        return resultado.Sucesso ? Ok(resultado.Valor!.Select(RevisaoResponse.De).ToList()) : this.Problema(resultado);
+    }
+
     /// <summary>O ator vem SEMPRE do token (id e perfil), nunca do corpo ou da rota.</summary>
     private bool TentarObterAtor(out AtorDoRelatorio ator)
     {

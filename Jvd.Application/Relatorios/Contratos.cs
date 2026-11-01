@@ -87,9 +87,41 @@ public sealed record RelatorioDetalhe(
     SnapshotDoEmissor? Emissor,
     DateTime? EmitidoEm,
     Guid? EmitidoPor,
+    DateTime? CanceladoEm,
+    Guid? CanceladoPor,
+    string? MotivoCancelamento,
     DateTime CriadoEm,
     DateTime AtualizadoEm,
     string Versao);
+
+/// <summary>
+/// Dados de uma retificação. Cliente, equipamento e executor NÃO mudam por retificação (cancela-se e emite-se outro).
+/// <c>AtualizarDadosDeCadastro</c> refaz os snapshots do cliente e do equipamento a partir do cadastro atual.
+/// </summary>
+public sealed record DadosDaRetificacao(
+    string? Motivo,
+    TipoServico TipoServico,
+    DateOnly DataServico,
+    string? ServicoExecutado,
+    string? Observacoes,
+    DateOnly? VerificacaoAnteriorData,
+    string? VerificacaoAnteriorCertificado,
+    string? NumeroSeloReparador,
+    int GarantiaDias,
+    decimal Total,
+    decimal Desconto,
+    Guid? CatalogoServicoId,
+    bool AtualizarDadosDeCadastro);
+
+/// <summary>Uma linha do histórico. Os JSON têm só os campos alterados (valores antes e depois) e podem conter dados pessoais.</summary>
+public sealed record RevisaoDoRelatorio(
+    int Revisao,
+    DateTime RetificadoEm,
+    Guid RetificadoPor,
+    string RetificadoPorNome,
+    string Motivo,
+    System.Text.Json.JsonElement DadosAnteriores,
+    System.Text.Json.JsonElement DadosNovos);
 
 public sealed record FiltroDeRelatorios(
     Guid? ClienteId, Guid? EquipamentoId, Guid? TecnicoId, StatusRelatorio? Status, TipoServico? Tipo,
@@ -116,4 +148,18 @@ public interface IRelatorioService
 
     /// <summary>Atribui o número, grava os snapshots e fecha o relatório para edição direta.</summary>
     Task<Resultado<RelatorioDetalhe>> EmitirAsync(Guid id, string versao, AtorDoRelatorio ator, CancellationToken ct = default);
+
+    /// <summary>
+    /// Altera um relatório emitido com histórico: exige motivo, mantém o número, incrementa a revisão e guarda o que
+    /// mudou, quem e quando.
+    /// </summary>
+    Task<Resultado<RelatorioDetalhe>> RetificarAsync(
+        Guid id, DadosDaRetificacao dados, string versao, AtorDoRelatorio ator, CancellationToken ct = default);
+
+    /// <summary>Cancela um relatório emitido (motivo obrigatório). O número é mantido e nunca reutilizado.</summary>
+    Task<Resultado<RelatorioDetalhe>> CancelarAsync(
+        Guid id, string? motivo, string versao, AtorDoRelatorio ator, CancellationToken ct = default);
+
+    /// <summary>Histórico de retificações, da mais antiga para a mais nova. Mesmo acesso do relatório.</summary>
+    Task<Resultado<IReadOnlyList<RevisaoDoRelatorio>>> ListarRevisoesAsync(Guid id, AtorDoRelatorio ator, CancellationToken ct = default);
 }
