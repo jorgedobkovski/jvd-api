@@ -75,6 +75,8 @@ public static class DependencyInjection
         services.AddScoped<IImportacaoService, ImportacaoService>();
         services.AddScoped<IRelatorioService, RelatorioService>();
         services.AddScoped<IRelatorioPdfService, RelatorioPdfService>();
+        services.AddScoped<IIndicadoresService, IndicadoresService>();
+        services.AddScoped<IExportadorDeRelatorios, ExportadorDeRelatorios>();
         services.AddScoped<UsuarioSeeder>();
 
         return services;
