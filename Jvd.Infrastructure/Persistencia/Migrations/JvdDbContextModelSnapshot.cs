@@ -130,6 +130,29 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.ToTable("cliente", (string)null);
                 });
 
+            modelBuilder.Entity("Jvd.Domain.ContadorDeNumeracao", b =>
+                {
+                    b.Property<string>("Chave")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)")
+                        .HasColumnName("chave");
+
+                    b.Property<int>("Ultimo")
+                        .HasColumnType("int")
+                        .HasColumnName("ultimo");
+
+                    b.HasKey("Chave");
+
+                    b.ToTable("contador_numeracao", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Chave = "relatorio",
+                            Ultimo = 0
+                        });
+                });
+
             modelBuilder.Entity("Jvd.Domain.Emissor", b =>
                 {
                     b.Property<Guid>("Id")
@@ -426,6 +449,217 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.HasIndex("ImportacaoId", "Linha");
 
                     b.ToTable("importacao_erro", (string)null);
+                });
+
+            modelBuilder.Entity("Jvd.Domain.Relatorio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AtualizadoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("atualizado_em");
+
+                    b.Property<DateTime?>("CanceladoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("cancelado_em");
+
+                    b.Property<Guid?>("CanceladoPor")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("cancelado_por");
+
+                    b.Property<Guid?>("CatalogoServicoId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("catalogo_servico_id");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("cliente_id");
+
+                    b.Property<string>("ClienteSnapshot")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("cliente_snapshot");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("criado_em");
+
+                    b.Property<Guid>("CriadoPor")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("criado_por");
+
+                    b.Property<DateOnly>("DataServico")
+                        .HasColumnType("date")
+                        .HasColumnName("data_servico");
+
+                    b.Property<decimal>("Desconto")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("desconto");
+
+                    b.Property<string>("EmissorSnapshot")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("emissor_snapshot");
+
+                    b.Property<DateTime?>("EmitidoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("emitido_em");
+
+                    b.Property<Guid?>("EmitidoPor")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("emitido_por");
+
+                    b.Property<Guid>("EquipamentoId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("equipamento_id");
+
+                    b.Property<string>("EquipamentoSnapshot")
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("equipamento_snapshot");
+
+                    b.Property<int>("GarantiaDias")
+                        .HasColumnType("int")
+                        .HasColumnName("garantia_dias");
+
+                    b.Property<string>("MotivoCancelamento")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("motivo_cancelamento");
+
+                    b.Property<int?>("Numero")
+                        .HasColumnType("int")
+                        .HasColumnName("numero");
+
+                    b.Property<string>("NumeroSeloReparador")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("numero_selo_reparador");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
+                        .HasColumnName("observacoes");
+
+                    b.Property<int>("Revisao")
+                        .HasColumnType("int")
+                        .HasColumnName("revisao");
+
+                    b.Property<string>("ServicoExecutado")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)")
+                        .HasColumnName("servico_executado");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TecnicoId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("tecnico_id");
+
+                    b.Property<string>("TipoServico")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("tipo_servico");
+
+                    b.Property<decimal>("Total")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("total");
+
+                    b.Property<decimal>("TotalGeral")
+                        .HasColumnType("decimal(12,2)")
+                        .HasColumnName("total_geral");
+
+                    b.Property<string>("VerificacaoAnteriorCertificado")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)")
+                        .HasColumnName("verificacao_anterior_certificado");
+
+                    b.Property<DateOnly?>("VerificacaoAnteriorData")
+                        .HasColumnType("date")
+                        .HasColumnName("verificacao_anterior_data");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("versao");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CatalogoServicoId");
+
+                    b.HasIndex("CriadoPor");
+
+                    b.HasIndex("DataServico");
+
+                    b.HasIndex("Numero")
+                        .IsUnique()
+                        .HasFilter("[numero] IS NOT NULL");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("ClienteId", "DataServico");
+
+                    b.HasIndex("EquipamentoId", "DataServico");
+
+                    b.HasIndex("TecnicoId", "DataServico");
+
+                    b.ToTable("relatorio", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_relatorio_desconto", "[desconto] >= 0 AND [desconto] <= [total]");
+
+                            t.HasCheckConstraint("ck_relatorio_garantia", "[garantia_dias] >= 0");
+
+                            t.HasCheckConstraint("ck_relatorio_numero", "([status] = 'Rascunho' AND [numero] IS NULL) OR ([status] <> 'Rascunho' AND [numero] IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_relatorio_total_geral", "[total_geral] = [total] - [desconto]");
+                        });
+                });
+
+            modelBuilder.Entity("Jvd.Domain.RelatorioEvento", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Detalhe")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)")
+                        .HasColumnName("detalhe");
+
+                    b.Property<DateTime>("OcorridoEm")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("ocorrido_em");
+
+                    b.Property<Guid>("RelatorioId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("relatorio_id");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("tipo");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("RelatorioId", "OcorridoEm");
+
+                    b.ToTable("relatorio_evento", (string)null);
                 });
 
             modelBuilder.Entity("Jvd.Domain.ServicoCatalogo", b =>
@@ -746,6 +980,53 @@ namespace Jvd.Infrastructure.Persistencia.Migrations
                     b.HasOne("Jvd.Domain.Importacao", null)
                         .WithMany()
                         .HasForeignKey("ImportacaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jvd.Domain.Relatorio", b =>
+                {
+                    b.HasOne("Jvd.Domain.ServicoCatalogo", null)
+                        .WithMany()
+                        .HasForeignKey("CatalogoServicoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Jvd.Domain.Cliente", null)
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Jvd.Infrastructure.Identity.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("CriadoPor")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Jvd.Domain.Equipamento", null)
+                        .WithMany()
+                        .HasForeignKey("EquipamentoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Jvd.Infrastructure.Identity.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("TecnicoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jvd.Domain.RelatorioEvento", b =>
+                {
+                    b.HasOne("Jvd.Domain.Relatorio", null)
+                        .WithMany()
+                        .HasForeignKey("RelatorioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Jvd.Infrastructure.Identity.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

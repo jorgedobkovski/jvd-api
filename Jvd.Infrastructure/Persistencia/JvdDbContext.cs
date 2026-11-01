@@ -23,6 +23,9 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
     public DbSet<ServicoCatalogo> Catalogo => Set<ServicoCatalogo>();
     public DbSet<ImportacaoRealizada> Importacoes => Set<ImportacaoRealizada>();
     public DbSet<ImportacaoErro> ImportacoesErros => Set<ImportacaoErro>();
+    public DbSet<Relatorio> Relatorios => Set<Relatorio>();
+    public DbSet<RelatorioEvento> Eventos => Set<RelatorioEvento>();
+    public DbSet<ContadorDeNumeracao> Contadores => Set<ContadorDeNumeracao>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -177,6 +180,75 @@ public sealed class JvdDbContext(DbContextOptions<JvdDbContext> options)
             e.Property(x => x.Motivo).HasMaxLength(300).IsRequired();
             e.HasIndex(x => new { x.ImportacaoId, x.Linha });
             e.HasOne<ImportacaoRealizada>().WithMany().HasForeignKey(x => x.ImportacaoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Relatorio>(e =>
+        {
+            e.ToTable("relatorio", t =>
+            {
+                t.HasCheckConstraint("ck_relatorio_total_geral", "[total_geral] = [total] - [desconto]");
+                t.HasCheckConstraint("ck_relatorio_desconto", "[desconto] >= 0 AND [desconto] <= [total]");
+                t.HasCheckConstraint("ck_relatorio_garantia", "[garantia_dias] >= 0");
+                // Rascunho não tem número; emitido e cancelado sempre têm.
+                t.HasCheckConstraint("ck_relatorio_numero",
+                    "([status] = 'Rascunho' AND [numero] IS NULL) OR ([status] <> 'Rascunho' AND [numero] IS NOT NULL)");
+            });
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.TipoServico).HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.DataServico).HasColumnType("date");
+            e.Property(x => x.ServicoExecutado).HasMaxLength(4000).IsRequired();
+            e.Property(x => x.Observacoes).HasMaxLength(2000);
+            e.Property(x => x.VerificacaoAnteriorData).HasColumnType("date");
+            e.Property(x => x.VerificacaoAnteriorCertificado).HasMaxLength(60);
+            e.Property(x => x.NumeroSeloReparador).HasMaxLength(60);
+            e.Property(x => x.Total).HasColumnType("decimal(12,2)");
+            e.Property(x => x.Desconto).HasColumnType("decimal(12,2)");
+            e.Property(x => x.TotalGeral).HasColumnType("decimal(12,2)");
+            e.Property(x => x.ClienteSnapshot).HasColumnType("nvarchar(max)");
+            e.Property(x => x.EquipamentoSnapshot).HasColumnType("nvarchar(max)");
+            e.Property(x => x.EmissorSnapshot).HasColumnType("nvarchar(max)");
+            e.Property(x => x.MotivoCancelamento).HasMaxLength(500);
+            e.Property(x => x.EmitidoEm).HasColumnType("datetime2");
+            e.Property(x => x.CanceladoEm).HasColumnType("datetime2");
+            e.Property(x => x.CriadoEm).HasColumnType("datetime2");
+            e.Property(x => x.AtualizadoEm).HasColumnType("datetime2");
+            e.Property(x => x.Versao).IsRowVersion();
+
+            // O número é único (sem repetir nem reaproveitar); rascunhos não têm número.
+            e.HasIndex(x => x.Numero).IsUnique().HasFilter("[numero] IS NOT NULL");
+            e.HasIndex(x => new { x.ClienteId, x.DataServico });
+            e.HasIndex(x => new { x.EquipamentoId, x.DataServico });
+            e.HasIndex(x => new { x.TecnicoId, x.DataServico });
+            e.HasIndex(x => x.Status);
+            e.HasIndex(x => x.DataServico);
+
+            // Nada é apagado fisicamente (exceto rascunho, que é descartado pelo serviço): sem cascata.
+            e.HasOne<Cliente>().WithMany().HasForeignKey(x => x.ClienteId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Equipamento>().WithMany().HasForeignKey(x => x.EquipamentoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Usuario>().WithMany().HasForeignKey(x => x.TecnicoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Usuario>().WithMany().HasForeignKey(x => x.CriadoPor).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ServicoCatalogo>().WithMany().HasForeignKey(x => x.CatalogoServicoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<RelatorioEvento>(e =>
+        {
+            e.ToTable("relatorio_evento");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Tipo).HasConversion<string>().HasMaxLength(20).IsRequired();
+            e.Property(x => x.OcorridoEm).HasColumnType("datetime2");
+            e.Property(x => x.Detalhe).HasMaxLength(300);
+            e.HasIndex(x => new { x.RelatorioId, x.OcorridoEm });
+            e.HasOne<Relatorio>().WithMany().HasForeignKey(x => x.RelatorioId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Usuario>().WithMany().HasForeignKey(x => x.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ContadorDeNumeracao>(e =>
+        {
+            e.ToTable("contador_numeracao");
+            e.HasKey(x => x.Chave);
+            e.Property(x => x.Chave).HasMaxLength(40).ValueGeneratedNever();
+            e.HasData(new ContadorDeNumeracao { Chave = ContadorDeNumeracao.ChaveDoRelatorio, Ultimo = 0 });
         });
 
         AplicarSnakeCase(builder);
